@@ -1,14 +1,14 @@
-# Metagenome Assembly, Binning & MAG Summarisation Pipeline
+# shotgun_metagenomics_binning
 
 A modular Snakemake pipeline for metagenomic assembly, read mapping, binning, and MAG dereplication/taxonomy. The three workflows can be run independently or chained sequentially.
 
 ---
 ## TODO:
 
-- Branch with CoverM for mapping
-- option to use galah
 - move Binette to the next summarise_mags
-- use Simka / SimkaMin to select samples for mapping
+- Branch with CoverM for mapping
+- option to use galah instead of Drep in summarise_mags
+- later: use Simka / SimkaMin to select samples for mapping
 
 ## Overview
 
