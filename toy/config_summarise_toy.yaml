@@ -1,0 +1,29 @@
+# -------------------------------------------------------------------
+# Input Tables & Sourcing
+# -------------------------------------------------------------------
+assemblies_tsv: "assemblies_toy.tsv"
+mappings_tsv: "mappings_toy.tsv"
+output_dir: "results_toy"
+
+# -------------------------------------------------------------------
+# Post-Binning Database Paths
+# -------------------------------------------------------------------
+checkm_db_path: "/maps/projects/hansen_ol-AUDIT/scratch/NILU/Ecoli/sweep/02_insilico_pcr_snk/checkm_db"
+checkm_outdir_name: "checkm1"
+checkm_extension: "gz"
+gtdbtk_db_path: "/maps/projects/hansen_ol-AUDIT/scratch/GTDB/release232"
+gtdbtk_extension: "gz"
+gtdbtk_min_af: 0.65
+gtdbtk_pplacer_cpus: 8
+gtdbtk_write_single_copy_genes: true
+gtdbtk_keep_intermediates: true
+
+# -------------------------------------------------------------------
+# dRep Dereplication Thresholds
+# -------------------------------------------------------------------
+drep_completeness: 66
+drep_contamination: 20
+drep_primary_ani: 0.95
+drep_secondary_ani: 0.98
+drep_min_overlap: 0.30
+drep_s_algorithm: "ANIn"

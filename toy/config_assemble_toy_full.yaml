@@ -1,0 +1,3 @@
+assemblies_tsv: "assemblies_toy.tsv"
+output_dir: "results_toy_full"
+assembler: "spades"

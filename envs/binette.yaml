@@ -1,0 +1,8 @@
+name: binette
+channels:
+  - conda-forge
+  - bioconda
+  - defaults
+dependencies:
+  - binette
+  - checkm2

@@ -1,0 +1,15 @@
+# Pipeline outputs & run state (generated, not code)
+results/
+results_*/
+logs/
+.snakemake/
+
+# Toy dataset - actual data, not code (configs/TSVs are kept)
+toy/reads/
+toy/assemblies/
+
+# Python / editor / OS cruft
+__pycache__/
+*.pyc
+.DS_Store
+*.swp

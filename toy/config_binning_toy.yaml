@@ -1,0 +1,45 @@
+# -------------------------------------------------------------------
+# Input Tables & Sourcing
+# -------------------------------------------------------------------
+assemblies_tsv: "assemblies_toy.tsv"
+mappings_tsv: "mappings_toy.tsv"
+output_dir: "results_toy"
+assembler: "spades"
+
+# -------------------------------------------------------------------
+# Binner selection
+# -------------------------------------------------------------------
+binners: [metabat2]
+run_binette: false
+binette_checkm2_db: ""
+
+# -------------------------------------------------------------------
+# Anvi'o contig reformat (optional)
+# -------------------------------------------------------------------
+anvi_reformat: false
+anvi_min_contig_len: 1000
+
+# -------------------------------------------------------------------
+# Pre-installed conda env paths (skip yaml-based install if set)
+# -------------------------------------------------------------------
+conda_dirs:
+  mapping:  null                                                  # needs building (strobealign added)
+  binning:  /home/ljc444/.conda/snakemake_envs/7f98d8a39e48151911f533947efd5a37_
+  semibin2: /home/ljc444/.conda/envs/semibin
+  vamb:     null
+  binette:  null
+  anvio:    /home/ljc444/.conda/envs/anvio-9
+
+# -------------------------------------------------------------------
+# MetaBAT2 tuning
+# -------------------------------------------------------------------
+metabat2:
+  min_contig: 2000
+  max_edges: 500
+  min_cv: 1.0
+  min_cv_sum: 1.0
+  max_p: 95
+  min_s: 60
+  min_cls_size: 200000
+  save_cls: true
+  verbose: true

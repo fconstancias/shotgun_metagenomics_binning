@@ -1,0 +1,5 @@
+assembly_group	assembly_path	fq1	fq2
+coasm_A		/projects/hansen_ol-AUDIT/scratch/NILU/metagenomes/binning_smk/toy/reads/S_144_R1.fastq.gz	/projects/hansen_ol-AUDIT/scratch/NILU/metagenomes/binning_smk/toy/reads/S_144_R2.fastq.gz
+coasm_A		/projects/hansen_ol-AUDIT/scratch/NILU/metagenomes/binning_smk/toy/reads/S_276_R1.fastq.gz	/projects/hansen_ol-AUDIT/scratch/NILU/metagenomes/binning_smk/toy/reads/S_276_R2.fastq.gz
+coasm_A		/projects/hansen_ol-AUDIT/scratch/NILU/metagenomes/binning_smk/toy/reads/S_133_R1.fastq.gz	/projects/hansen_ol-AUDIT/scratch/NILU/metagenomes/binning_smk/toy/reads/S_133_R2.fastq.gz
+spaS135		/projects/hansen_ol-AUDIT/scratch/NILU/metagenomes/binning_smk/toy/reads/S_135_R1.fastq.gz	/projects/hansen_ol-AUDIT/scratch/NILU/metagenomes/binning_smk/toy/reads/S_135_R2.fastq.gz

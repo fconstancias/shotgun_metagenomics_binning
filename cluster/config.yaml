@@ -1,0 +1,81 @@
+executor: slurm
+slurm-logdir: logs/slurm
+
+jobs: 50
+
+latency-wait: 60
+printshellcmds: true
+keep-going: true
+rerun-incomplete: true
+
+max-jobs-per-second: 10
+max-status-checks-per-second: 5
+
+use-conda: true
+conda-frontend: conda
+conda-prefix: /home/ljc444/.conda/snakemake_envs
+
+default-resources:
+  mem_mb: 2000
+  runtime: 60
+  slurm_account: cbmr
+  slurm_partition: standardqueue
+
+set-threads:
+  bowtie2_build: 4
+  bowtie2_map_and_sort: 8
+  strobealign_aemb: 8
+  semibin2_bin: 8
+  vamb_bin: 8
+  binette_refine: 8
+  binning: 4
+  checkm: 30
+  drep: 30
+  gtdbtk: 30
+
+set-resources:
+  reformat_contigs:
+    mem_mb: 4000
+    runtime: 60
+  bowtie2_build:
+    mem_mb: 8000
+    runtime: 300
+  bowtie2_map_and_sort:
+    mem_mb: 16000
+    runtime: 240
+  bowtie2_depth:
+    mem_mb: 8000
+    runtime: 120
+  strobealign_aemb:
+    mem_mb: 16000
+    runtime: 120
+  combine_depths:
+    mem_mb: 4000
+    runtime: 60
+  binning:
+    mem_mb: 64000
+    runtime: 480
+  semibin2_bin:
+    mem_mb: 32000
+    runtime: 720
+  vamb_bin:
+    mem_mb: 64000
+    runtime: 720
+  binette_refine:
+    mem_mb: 32000
+    runtime: 720
+  rename_bin:
+    mem_mb: 2000
+    runtime: 60
+  aggregate_bins_local:
+    mem_mb: 2000
+    runtime: 60
+  checkm:
+    mem_mb: 100000
+    runtime: 2880
+  gtdbtk:
+    mem_mb: 200000
+    runtime: 4320
+  drep:
+    mem_mb: 100000
+    runtime: 2880

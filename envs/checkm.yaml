@@ -1,0 +1,7 @@
+channels:
+  - conda-forge
+  - bioconda
+dependencies:
+  - python=3.10
+  - libdeflate=1.25
+  - checkm-genome=1.2.5

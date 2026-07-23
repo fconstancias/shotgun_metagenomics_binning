@@ -1,0 +1,66 @@
+# -------------------------------------------------------------------
+# Input Tables & Sourcing
+# -------------------------------------------------------------------
+assemblies_tsv: "assemblies_spa_single.tsv"
+mappings_tsv: "mappings_spa_single.tsv"
+output_dir: "results"
+assembler: "spades"
+
+# -------------------------------------------------------------------
+# Binner selection
+# -------------------------------------------------------------------
+# List of binners to run. Options: metabat2, semibin2, vamb
+binners: [metabat2]
+
+# Run Binette to merge and refine bins from multiple binners.
+# Requires ≥2 entries in binners.
+run_binette: false
+binette_checkm2_db: "/data/databases/checkm2/CheckM2_database/uniref100.KO.1.dmnd"
+
+# -------------------------------------------------------------------
+# CONCOCT binning via Anvi'o (separate, manual curation track)
+# -------------------------------------------------------------------
+# Run CONCOCT clustering on contigs DB + merged profiles.
+# Runs in parallel to multi-binner track (MetaBAT2/SemiBin2/VAMB).
+# Not compatible with Binette — each cluster count produces a separate bin set.
+run_concoct: false
+concoct_clusters: [10, 15, 20]
+
+# -------------------------------------------------------------------
+# Optional: pre-installed conda environment paths
+# -------------------------------------------------------------------
+# For any key below, set the path to an existing conda env directory to
+# skip building a new env from the yaml file. Leave null (or omit) to
+# install from the bundled envs/*.yaml instead.
+# Useful when the cluster already has envs built, or when a tool is hard
+# to install from scratch (e.g. Anvi'o).
+conda_dirs:
+  mapping:  null   # e.g. /home/ljc444/.conda/envs/mapping_env
+  binning:  null   # e.g. /home/ljc444/.conda/envs/metabat2
+  semibin2: null   # e.g. /home/ljc444/.conda/envs/semibin
+  vamb:     null
+  binette:  null
+  anvio:    null   # e.g. /home/ljc444/.conda/envs/anvio-9
+
+# -------------------------------------------------------------------
+# Anvi'o contig reformat (optional pre-binning step)
+# -------------------------------------------------------------------
+# Filter short contigs and simplify headers with anvi-script-reformat-fasta.
+# NOTE: When anvi_reformat: true, reformat runs before bowtie2-build so contig
+# names stay consistent across index, BAM, and depth table.
+anvi_reformat: false
+anvi_min_contig_len: 1000
+
+# -------------------------------------------------------------------
+# MetaBAT2 tuning
+# -------------------------------------------------------------------
+metabat2:
+  min_contig: 2000
+  max_edges: 500
+  min_cv: 1.0
+  min_cv_sum: 1.0
+  max_p: 95
+  min_s: 60
+  min_cls_size: 200000
+  save_cls: true
+  verbose: true

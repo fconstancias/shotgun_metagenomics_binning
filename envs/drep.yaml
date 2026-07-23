@@ -1,0 +1,21 @@
+channels:
+  - conda-forge
+  - bioconda
+dependencies:
+  - python=3.10
+  - pip
+  - numpy
+  - pandas
+  - scipy
+  - matplotlib-base
+  - seaborn
+  - scikit-learn
+  - biopython
+  - networkx
+  - tqdm
+  - fastani
+  - mash
+  - mummer4
+  - prodigal
+  - pip:
+      - drep==3.6.2

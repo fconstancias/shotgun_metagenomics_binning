@@ -1,0 +1,4 @@
+assembly_group	assembly_path	fq1	fq2
+spaS144	/projects/hansen_ol-AUDIT/scratch/NILU/metagenomes/binning_smk/toy/assemblies/spaS144_scaffolds_fixed.fasta	None	None
+spaS276	/projects/hansen_ol-AUDIT/scratch/NILU/metagenomes/binning_smk/toy/assemblies/spaS276_scaffolds_fixed.fasta	None	None
+spaS135	/projects/hansen_ol-AUDIT/scratch/NILU/metagenomes/binning_smk/toy/assemblies/spaS135_scaffolds_fixed.fasta	None	None

@@ -1,0 +1,3 @@
+assemblies_tsv: "assemblies_toy_coasm.tsv"
+output_dir: "results_toy_coasm"
+assembler: "megahit"
