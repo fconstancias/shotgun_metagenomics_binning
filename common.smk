@@ -77,6 +77,10 @@ built_constraint = "|".join(map(re.escape, BUILT_ASM_GROUPS)) if BUILT_ASM_GROUP
 # Helper list of all assembly groups
 all_groups = list(PREBUILT_ASM.keys()) + list(BUILT_ASM_GROUPS)
 
+# Assembly groups that actually have mapped samples (i.e. can be binned).
+# Shared by metagenome_binning.smk and summarise_mags.smk.
+binnable_groups = [g for g in all_groups if g in ASM_TO_MAPPED_SAMPLES]
+
 # snakemake -s metagenome_binning.smk --configfile config_binning.yaml --profile cluster --use-conda
 # snakemake -s metagenome_assemble.smk --configfile config_assemble.yaml --profile cluster --use-conda
 # snakemake -s summarise_mags.smk --configfile config_summarise.yaml --profile cluster --use-conda

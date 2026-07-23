@@ -14,8 +14,6 @@ METABAT2_VERBOSE = bool(METABAT2_CFG.get("verbose", True))
 RUN_CONCOCT = config.get("run_concoct", False)
 CONCOCT_CLUSTERS = config.get("concoct_clusters", [10, 15, 20])
 
-binnable_groups = [g for g in all_groups if g in ASM_TO_MAPPED_SAMPLES]
-
 # Sample sets used to route each sample_id to exactly one of the two aemb-TSV
 # producing rules (bowtie2_bam_to_aemb vs strobealign_aemb). Assumes a given
 # sample_id always uses the same mapping_tool wherever it appears.
@@ -58,15 +56,10 @@ def get_all_renamed_bins(wildcards):
     for group in all_groups:
         if group not in ASM_TO_MAPPED_SAMPLES:
             continue
-        if RUN_BINETTE:
-            bins_dir = f"{OUT}/binette/{group}/final_bins/"
-            found_bins = glob.glob(os.path.join(bins_dir, "*.fa")) + \
-                         glob.glob(os.path.join(bins_dir, "*.fa.gz"))
-        else:
-            checkpoint_dir = checkpoints.binning.get(assembly_group=group).output.out_dir
-            found_bins = glob.glob(os.path.join(checkpoint_dir, "bin.*.fa")) + \
-                         glob.glob(os.path.join(checkpoint_dir, "bin.*.fasta")) + \
-                         glob.glob(os.path.join(checkpoint_dir, "bin.*.fa.gz"))
+        checkpoint_dir = checkpoints.binning.get(assembly_group=group).output.out_dir
+        found_bins = glob.glob(os.path.join(checkpoint_dir, "bin.*.fa")) + \
+                     glob.glob(os.path.join(checkpoint_dir, "bin.*.fasta")) + \
+                     glob.glob(os.path.join(checkpoint_dir, "bin.*.fa.gz"))
         for b in found_bins:
             bin_base = os.path.basename(b)
             if bin_base.endswith(".fa.gz") or bin_base.endswith(".fasta.gz"):
@@ -74,18 +67,6 @@ def get_all_renamed_bins(wildcards):
             else:
                 renamed_bins.append(f"{OUT}/renamed_bins/{group}_{bin_base}.gz")
     return renamed_bins
-
-def get_binette_bin_dirs(wildcards):
-    """Return list of binner output dirs for binette --bin_dirs."""
-    dirs = []
-    if "metabat2" in BINNERS:
-        ck_dir = checkpoints.binning.get(assembly_group=wildcards.assembly_group).output.out_dir
-        dirs.append(ck_dir)
-    if "semibin2" in BINNERS:
-        dirs.append(f"{OUT}/semibin/{wildcards.assembly_group}/output_recluster_bins/")
-    if "vamb" in BINNERS:
-        dirs.append(f"{OUT}/vamb/{wildcards.assembly_group}/bins/")
-    return dirs
 
 def get_bowtie2_samples(wildcards):
     """Return list of samples mapped with bowtie2 to this assembly_group."""
@@ -104,8 +85,6 @@ def _all_targets(wildcards):
         targets += [f"{OUT}/semibin/{g}/output_recluster_bins/" for g in binnable_groups]
     if "vamb" in BINNERS:
         targets += [f"{OUT}/vamb/{g}/clusters.tsv" for g in binnable_groups]
-    if RUN_BINETTE:
-        targets += [f"{OUT}/binette/{g}/final_bins_quality_reports.tsv" for g in binnable_groups]
     if RUN_CONCOCT:
         for g in concoct_capable_groups:
             for nc in CONCOCT_CLUSTERS:
@@ -405,53 +384,18 @@ rule vamb_bin:
         "rm -rf {params.outdir} && vamb bin default --outdir {params.outdir} --fasta {input.contigs} --aemb {input.aemb_files} -t {threads}"
 
 ############################################
-# Binette (multi-binner refinement)
-############################################
-
-rule binette_refine:
-    input:
-        assembly = get_contigs_for_binning,
-        bin_dirs = get_binette_bin_dirs
-    output:
-        f"{OUT}/binette/{{assembly_group}}/final_bins_quality_reports.tsv"
-    params:
-        outdir     = f"{OUT}/binette/{{assembly_group}}",
-        bin_dirs   = lambda w, input: " ".join(input.bin_dirs),
-        checkm2_db = config.get("binette_checkm2_db", "")
-    conda:
-        conda_env("binette", "envs/binette.yaml")
-    threads: 8
-    resources:
-        mem_mb = 32000,
-        time   = "12:00:00"
-    shell:
-        """
-        export CHECKM2DB='{params.checkm2_db}'
-        binette --bin_dirs {params.bin_dirs} -c {input.assembly} -t {threads} -o {params.outdir}
-        """
-
-############################################
 # Rename and aggregate final bins
 ############################################
 
 rule rename_bin:
     input:
         fa = lambda w: next(
-            p for p in (
-                [f"{OUT}/binette/{w.assembly_group}/final_bins/{w.bin_id}.{ext}" for ext in ("fa", "fasta")]
-                if RUN_BINETTE else
-                [f"{OUT}/bins/{w.assembly_group}/{w.bin_id}.{ext}" for ext in ("fa", "fasta")]
-            )
+            p for p in [f"{OUT}/bins/{w.assembly_group}/{w.bin_id}.{ext}" for ext in ("fa", "fasta")]
             if os.path.exists(p)
         )
     output:
         f"{OUT}/renamed_bins/{{assembly_group}}_{{bin_id}}.fa.gz"
     wildcard_constraints:
-        # Without this, {assembly_group}_{bin_id} is ambiguous: Binette's bin
-        # files (e.g. "binette_bin11.fa") contain an underscore themselves, so
-        # greedy wildcard matching would split "spaS144_binette_bin11" as
-        # assembly_group="spaS144_binette", bin_id="bin11" instead of the
-        # intended assembly_group="spaS144", bin_id="binette_bin11".
         assembly_group = "|".join(re.escape(g) for g in binnable_groups)
     shell:
         """
@@ -461,8 +405,7 @@ rule rename_bin:
 
 rule aggregate_bins_local:
     input:
-        renamed      = get_all_renamed_bins,
-        binette_done = [f"{OUT}/binette/{g}/final_bins_quality_reports.tsv" for g in binnable_groups] if RUN_BINETTE else []
+        renamed = get_all_renamed_bins
     output:
         f"{OUT}/renamed_bins/.bins_aggregated.done"
     shell:

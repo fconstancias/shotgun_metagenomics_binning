@@ -5,7 +5,6 @@ A modular Snakemake pipeline for metagenomic assembly, read mapping, binning, an
 ---
 ## TODO:
 
-- move Binette to the next summarise_mags
 - Branch with CoverM for mapping
 - option to use galah instead of Drep in summarise_mags
 - later: use Simka / SimkaMin to select samples for mapping
@@ -23,9 +22,9 @@ Host-removed reads
    │                               → read mapping (bowtie2)
    │                               → strobealign aemb coverage
    │                               → MetaBAT2 / SemiBin2 / VAMB binning
-   │                               → optional Binette refinement
    ▼
-[3] summarise_mags.smk        ─── CheckM quality, GTDB-Tk taxonomy, dRep dereplication
+[3] summarise_mags.smk        ─── Optional Binette refinement, CheckM quality,
+                                   GTDB-Tk taxonomy, dRep dereplication
 ```
 
 ---
@@ -181,7 +180,11 @@ The typical setup: `bowtie2` for each sample's own assembly, `strobealign` for a
 7. **MetaBAT2** (if `metabat2` in `binners`) — uses `depth.txt`
 8. **SemiBin2** (if `semibin2` in `binners`) — uses strobealign aemb TSVs
 9. **VAMB** (if `vamb` in `binners`) — uses strobealign aemb TSVs, latest VAMB API (`vamb bin default --aemb`)
-10. **(Optional) Binette** — merges all binner output directories, selects best bins using CheckM2
+
+Multi-binner refinement with Binette now runs later, in `summarise_mags.smk`
+(see below) — it reads this workflow's raw per-binner bin directories
+directly from `output_dir`, so it can be re-run/tuned without re-running
+binning.
 
 Key config options:
 ```yaml
@@ -192,10 +195,6 @@ assembler:      "spades"   # must match workflow 1
 
 # Binner selection: any combination of metabat2, semibin2, vamb
 binners: [metabat2]
-
-# Multi-binner refinement with Binette (requires ≥2 binners)
-run_binette: false
-binette_checkm2_db: "/data/databases/checkm2/CheckM2_database/uniref100.KO.1.dmnd"
 
 # Optional Anvi'o contig reformat
 anvi_reformat: false
@@ -208,7 +207,6 @@ conda_dirs:
   binning:  null   # e.g. /home/ljc444/.conda/envs/metabat2
   semibin2: null   # e.g. /home/ljc444/.conda/envs/semibin
   vamb:     null
-  binette:  null
   anvio:    null   # e.g. /home/ljc444/.conda/envs/anvio-9
 
 # MetaBAT2 tuning (all optional, defaults shown)
@@ -297,16 +295,29 @@ concoct/
 
 **Config:** `config_summarise.yaml`
 
-Operates on `.fa.gz` bins in `{output_dir}/renamed_bins/`. Can be run on pre-existing bins without re-running the full pipeline.
+Operates on `.fa.gz` bins in `{output_dir}/renamed_bins/` (or `{output_dir}/binette_renamed_bins/` when `run_binette: true` — see below). Can be run on pre-existing bins without re-running the full pipeline.
 
 Steps:
-1. **CheckM** (v1) — lineage-aware completeness and contamination estimation
-2. **GTDB-Tk** — taxonomic classification using the GTDB reference database
-3. **dRep** — dereplication at configurable ANI thresholds, using CheckM scores to select representatives
+1. **(Optional) Binette** — refines the raw per-binner bins from `metagenome_binning.smk` (found directly on disk under `output_dir`: `bins/`, `semibin/*/output_recluster_bins/`, `vamb/*/bins/`), selecting the best bins across binners using CheckM2. Requires ≥2 binners to have actually produced bins for a given assembly group. Refined bins are renamed/gzipped into `binette_renamed_bins/`, which CheckM/GTDB-Tk/dRep then use instead of the raw `renamed_bins/`.
+2. **CheckM** (v1) — lineage-aware completeness and contamination estimation
+3. **GTDB-Tk** — taxonomic classification using the GTDB reference database
+4. **dRep** — dereplication at configurable ANI thresholds, using CheckM scores to select representatives
+
+Note: Binette's own CheckM2-based quality report and the separate CheckM1 run
+above both estimate completeness/contamination — CheckM1 always runs
+regardless of `run_binette`, so genome quality is computed twice when Binette
+is enabled. This mirrors the pipeline's existing behavior (previously across
+two separate workflow invocations) and is left as-is.
 
 Key config options:
 ```yaml
 output_dir:          "results"
+
+# Binette (multi-binner refinement, optional)
+run_binette:         false
+binette_checkm2_db:  "/data/databases/checkm2/CheckM2_database/uniref100.KO.1.dmnd"
+conda_dirs:
+  binette: null   # e.g. /home/ljc444/.conda/envs/binette_env
 
 checkm_db_path:      "/path/to/checkm_db"
 checkm_outdir_name:  "checkm1"
@@ -364,12 +375,14 @@ results/
 │   └── {assembly_group}/
 │       ├── clusters.tsv
 │       └── bins/                      # VAMB bin FASTA files
-├── binette/
+├── renamed_bins/
+│   └── {assembly_group}_bin.N.fa.gz   # raw per-binner bins, gzipped (metagenome_binning.smk)
+├── binette/                            # produced by summarise_mags.smk, if run_binette: true
 │   └── {assembly_group}/
 │       ├── final_bins_quality_reports.tsv
 │       └── final_bins/                # Binette-refined bins
-├── renamed_bins/
-│   └── {assembly_group}_bin.N.fa.gz  # final bins (metabat2, or binette if run_binette: true)
+├── binette_renamed_bins/               # produced by summarise_mags.smk, if run_binette: true
+│   └── {assembly_group}_binette_binN.fa.gz  # bins CheckM/GTDB-Tk/dRep actually use
 ├── checkm/
 │   └── checkm.txt
 ├── gtdbtk_classify/
@@ -453,29 +466,33 @@ snakemake -s ../metagenome_binning.smk --configfile config_binning_toy_coasm.yam
 
 ### Scenario B — Pre-built assemblies + Anvi'o reformat + all binners + Binette
 
-**Config files:** `config_assemble_toy_full.yaml` + `config_binning_toy_full.yaml`
+**Config files:** `config_assemble_toy_full.yaml` + `config_binning_toy_full.yaml` + `config_summarise_toy_full.yaml`
 **Output:** `results_toy_full/`
 
 Features tested:
 - `anvi_reformat: true` — simplify contig headers and filter <1000 bp before bowtie2-build
 - `binners: [metabat2, semibin2, vamb]` — all three binners run in parallel
-- `run_binette: true` — Binette selects the best bins across all three using CheckM2
+- `run_binette: true` (in `config_summarise_toy_full.yaml`) — Binette selects the best bins across all three using CheckM2
 
-Set `binette_checkm2_db` in `config_binning_toy_full.yaml` to the path of your CheckM2 diamond database before running.
+Set `binette_checkm2_db` in `config_summarise_toy_full.yaml` to the path of your CheckM2 diamond database before running.
 
 ```bash
 # 1. Symlink assemblies into results_toy_full
 snakemake -s ../metagenome_assemble.smk --configfile config_assemble_toy_full.yaml --cores 4
 
-# 2. Pre-build missing conda envs (mapping, vamb, binette)
+# 2. Pre-build missing conda envs (mapping, vamb)
 snakemake -s ../metagenome_binning.smk --configfile config_binning_toy_full.yaml \
   $SNAKEMAKE_FLAGS --conda-create-envs-only --cores 1
 
 # 3. Dry-run to verify DAG
 snakemake -s ../metagenome_binning.smk --configfile config_binning_toy_full.yaml --cores 1 -n
 
-# 4. Run
+# 4. Run binning (metabat2, semibin2, vamb)
 snakemake -s ../metagenome_binning.smk --configfile config_binning_toy_full.yaml \
+  $SNAKEMAKE_FLAGS --cores 8 --rerun-incomplete --latency-wait 60
+
+# 5. Refine with Binette + CheckM/GTDB-Tk/dRep
+snakemake -s ../summarise_mags.smk --configfile config_summarise_toy_full.yaml \
   $SNAKEMAKE_FLAGS --cores 8 --rerun-incomplete --latency-wait 60
 ```
 

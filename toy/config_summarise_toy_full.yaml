@@ -1,22 +1,20 @@
 # -------------------------------------------------------------------
-# Input Tables & Sourcing
+# Test B: Pre-existing assemblies, Anvi'o reformat, all binners, Binette
 # -------------------------------------------------------------------
-assemblies_tsv: "assemblies.tsv"
-mappings_tsv: "mappings.tsv"
-output_dir: "results"
+# Pairs with toy/config_binning_toy_full.yaml — run that first (binners run
+# there), then this config to refine with Binette + CheckM/GTDB-Tk/dRep.
+assemblies_tsv: "assemblies_toy.tsv"
+mappings_tsv:   "mappings_toy.tsv"
+output_dir:     "results_toy_full"
 
 # -------------------------------------------------------------------
-# Binette (multi-binner refinement, optional)
+# Binette (multi-binner refinement)
 # -------------------------------------------------------------------
-# Reads the raw per-binner bins already produced by metagenome_binning.smk
-# (in output_dir above) and refines them. Requires >=2 binners to have been
-# run there.
-run_binette: false
-binette_checkm2_db: "/data/databases/checkm2/CheckM2_database/uniref100.KO.1.dmnd"
+run_binette:        true
+binette_checkm2_db: "/maps/projects/hansen_ol-AUDIT/scratch/checkm2/CheckM2_database/uniref100.KO.1.dmnd"
 
-# Optional: pre-installed conda env path for Binette (skip yaml-based install)
 conda_dirs:
-  binette: null   # e.g. /home/ljc444/.conda/envs/binette_env
+  binette: /home/ljc444/.conda/snakemake_envs/binette_env
 
 # -------------------------------------------------------------------
 # Post-Binning Database Paths
@@ -24,9 +22,9 @@ conda_dirs:
 checkm_db_path: "/maps/projects/hansen_ol-AUDIT/scratch/NILU/Ecoli/sweep/02_insilico_pcr_snk/checkm_db"
 checkm_outdir_name: "checkm1"
 checkm_extension: "gz"
-gtdbtk_db_path: "/maps/projects/hansen_ol-AUDIT/scratch/GTDB/release226"
+gtdbtk_db_path: "/maps/projects/hansen_ol-AUDIT/scratch/GTDB/release232"
 gtdbtk_extension: "gz"
-gtdbtk_min_af: 0.5
+gtdbtk_min_af: 0.65
 gtdbtk_pplacer_cpus: 8
 gtdbtk_write_single_copy_genes: true
 gtdbtk_keep_intermediates: true

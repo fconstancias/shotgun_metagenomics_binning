@@ -4,26 +4,139 @@ CHECKM_DIRNAME = config.get("checkm_outdir_name", "checkm1")
 DREP_DIRNAME = config.get("drep_outdir_name", "dRep")
 CHECKM_DIR = f"{OUT}/{CHECKM_DIRNAME}"
 DREP_DIR = f"{OUT}/{DREP_DIRNAME}"
+BINETTE_DIR = f"{OUT}/binette"
+BINETTE_RENAMED_DIR = f"{OUT}/binette_renamed_bins"
 
-def get_all_renamed_bins_local(wildcards):
-    """
-    Finds preexisting bins inside the renamed directory.
-    This enables running this evaluation module directly on precalculated bins.
-    """
-    bin_dir = f"{OUT}/renamed_bins"
-    if os.path.exists(bin_dir):
-        bins = glob.glob(os.path.join(bin_dir, "*.fa.gz")) + glob.glob(os.path.join(bin_dir, "*.fasta.gz"))
-        if bins:
-            return bins
-    # Fallback to trigger upstream logic if empty
-    return [f"{OUT}/renamed_bins/.bins_aggregated.done"]
-
+# rule all must be the first rule in the file (Snakemake's implicit default
+# target), so it comes before the helper functions/rules it transitively
+# depends on.
 rule all:
     input:
         f"{CHECKM_DIR}/checkm.txt",
         f"{OUT}/gtdbtk_classify",
         f"{DREP_DIR}/dRep.genomeInfo",
         f"{DREP_DIR}/dereplicated_genomes"
+
+############################################
+# Binette (multi-binner refinement, optional)
+############################################
+
+def get_assembly_fasta(wildcards):
+    """Return reformatted contigs if anvi_reformat else original assembly
+    (same convention as metagenome_binning.smk's get_contigs_for_binning)."""
+    base = f"{OUT}/assembly/{ASSEMBLER}/{wildcards.assembly_group}/final.contigs.fa"
+    if ANVI_REFORMAT:
+        return f"{OUT}/assembly/{ASSEMBLER}/{wildcards.assembly_group}/final.contigs.reformatted.fa"
+    return base
+
+def _dir_has_bins(path):
+    return os.path.isdir(path) and bool(
+        glob.glob(os.path.join(path, "*.fa")) + glob.glob(os.path.join(path, "*.fasta"))
+    )
+
+def get_binette_bin_dirs(wildcards):
+    """Return list of binner output dirs for binette --bin_dirs, discovered
+    directly on disk. Unlike metagenome_binning.smk (where Binette used to
+    live), this workflow runs in a separate Snakemake invocation *after*
+    binning has already finished, so there is no checkpoint to query here —
+    binning's output directories are just read as plain paths."""
+    candidates = [
+        f"{OUT}/bins/{wildcards.assembly_group}",
+        f"{OUT}/semibin/{wildcards.assembly_group}/output_recluster_bins",
+        f"{OUT}/vamb/{wildcards.assembly_group}/bins",
+    ]
+    return [d for d in candidates if _dir_has_bins(d)]
+
+rule binette_refine:
+    input:
+        assembly = get_assembly_fasta,
+        bin_dirs = get_binette_bin_dirs
+    output:
+        f"{BINETTE_DIR}/{{assembly_group}}/final_bins_quality_reports.tsv"
+    params:
+        outdir     = f"{BINETTE_DIR}/{{assembly_group}}",
+        bin_dirs   = lambda w, input: " ".join(input.bin_dirs),
+        checkm2_db = config.get("binette_checkm2_db", "")
+    conda:
+        conda_env("binette", "envs/binette.yaml")
+    threads: 8
+    resources:
+        mem_mb = 32000,
+        time   = "12:00:00"
+    shell:
+        """
+        export CHECKM2DB='{params.checkm2_db}'
+        binette --bin_dirs {params.bin_dirs} -c {input.assembly} -t {threads} -o {params.outdir}
+        """
+
+rule rename_binette_bin:
+    input:
+        fa = lambda w: next(
+            p for p in [f"{BINETTE_DIR}/{w.assembly_group}/final_bins/{w.bin_id}.{ext}" for ext in ("fa", "fasta")]
+            if os.path.exists(p)
+        )
+    output:
+        f"{BINETTE_RENAMED_DIR}/{{assembly_group}}_{{bin_id}}.fa.gz"
+    wildcard_constraints:
+        # Binette's bin files (e.g. "binette_bin11.fa") contain an underscore
+        # themselves, so greedy wildcard matching would otherwise mis-split
+        # "spaS144_binette_bin11" as assembly_group="spaS144_binette",
+        # bin_id="bin11" instead of assembly_group="spaS144", bin_id="binette_bin11".
+        assembly_group = "|".join(re.escape(g) for g in binnable_groups)
+    shell:
+        """
+        mkdir -p {BINETTE_RENAMED_DIR}
+        gzip -c {input.fa} > {output}
+        """
+
+def get_all_binette_renamed_bins(wildcards):
+    renamed = []
+    for group in binnable_groups:
+        bins_dir = f"{BINETTE_DIR}/{group}/final_bins/"
+        found = glob.glob(os.path.join(bins_dir, "*.fa")) + glob.glob(os.path.join(bins_dir, "*.fa.gz"))
+        for b in found:
+            base = os.path.basename(b)
+            if base.endswith(".fa.gz") or base.endswith(".fasta.gz"):
+                renamed.append(f"{BINETTE_RENAMED_DIR}/{group}_{base}")
+            else:
+                renamed.append(f"{BINETTE_RENAMED_DIR}/{group}_{base}.gz")
+    return renamed
+
+rule aggregate_binette_bins:
+    input:
+        renamed         = get_all_binette_renamed_bins,
+        quality_reports = [f"{BINETTE_DIR}/{g}/final_bins_quality_reports.tsv" for g in binnable_groups]
+    output:
+        f"{BINETTE_RENAMED_DIR}/.bins_aggregated.done"
+    shell:
+        """
+        mkdir -p {BINETTE_RENAMED_DIR}
+        touch {output}
+        """
+
+############################################
+# CheckM / dRep / GTDB-Tk
+############################################
+
+def bin_source_dir():
+    """Bins feeding CheckM/dRep/GTDB-Tk: Binette's refined bins when enabled,
+    else the raw per-binner bins produced by metagenome_binning.smk."""
+    return BINETTE_RENAMED_DIR if RUN_BINETTE else f"{OUT}/renamed_bins"
+
+def get_all_renamed_bins_local(wildcards):
+    """
+    Finds preexisting bins inside the renamed directory.
+    This enables running this evaluation module directly on precalculated bins.
+    """
+    bin_dir = bin_source_dir()
+    if os.path.exists(bin_dir):
+        bins = glob.glob(os.path.join(bin_dir, "*.fa.gz")) + glob.glob(os.path.join(bin_dir, "*.fasta.gz"))
+        if bins:
+            return bins
+    # Fallback to trigger upstream logic if empty
+    if RUN_BINETTE:
+        return [f"{BINETTE_RENAMED_DIR}/.bins_aggregated.done"]
+    return [f"{OUT}/renamed_bins/.bins_aggregated.done"]
 
 rule checkm:
     input:
@@ -35,7 +148,7 @@ rule checkm:
         "envs/checkm.yaml"
     params:
         db_path = config["checkm_db_path"],
-        bin_dir = f"{OUT}/renamed_bins",
+        bin_dir = bin_source_dir(),
         ext = config.get("checkm_extension", "gz")
     threads: 16
     shell:
@@ -80,7 +193,7 @@ rule drep:
     conda:
         "envs/drep.yaml"
     params:
-        bin_dir = f"{OUT}/renamed_bins",
+        bin_dir = bin_source_dir(),
         drep_out = DREP_DIR,
         comp    = config.get("drep_completeness", 66),
         cont    = config.get("drep_contamination", 20),
@@ -103,7 +216,7 @@ rule gtdbtk:
         "envs/gtdbtk.yaml"
     params:
         db_path = config["gtdbtk_db_path"],
-        bin_dir = f"{OUT}/renamed_bins",
+        bin_dir = bin_source_dir(),
         ext = config.get("gtdbtk_extension", "gz"),
         min_af = config.get("gtdbtk_min_af", 0.5),
         pplacer_cpus = int(config.get("gtdbtk_pplacer_cpus", 8)),

@@ -10,8 +10,6 @@ assembler: "spades"
 # Binner selection
 # -------------------------------------------------------------------
 binners: [metabat2]
-run_binette: false
-binette_checkm2_db: ""
 
 # -------------------------------------------------------------------
 # Anvi'o contig reformat (optional)
@@ -27,7 +25,6 @@ conda_dirs:
   binning:  /home/ljc444/.conda/snakemake_envs/7f98d8a39e48151911f533947efd5a37_
   semibin2: /home/ljc444/.conda/envs/semibin
   vamb:     null
-  binette:  null
   anvio:    /home/ljc444/.conda/envs/anvio-9
 
 # -------------------------------------------------------------------

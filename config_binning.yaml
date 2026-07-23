@@ -12,10 +12,8 @@ assembler: "spades"
 # List of binners to run. Options: metabat2, semibin2, vamb
 binners: [metabat2]
 
-# Run Binette to merge and refine bins from multiple binners.
-# Requires ≥2 entries in binners.
-run_binette: false
-binette_checkm2_db: "/data/databases/checkm2/CheckM2_database/uniref100.KO.1.dmnd"
+# Binette (multi-binner refinement) now runs in summarise_mags.smk, not here
+# — see run_binette / binette_checkm2_db in config_summarise.yaml.
 
 # -------------------------------------------------------------------
 # CONCOCT binning via Anvi'o (separate, manual curation track)
@@ -39,7 +37,6 @@ conda_dirs:
   binning:  null   # e.g. /home/ljc444/.conda/envs/metabat2
   semibin2: null   # e.g. /home/ljc444/.conda/envs/semibin
   vamb:     null
-  binette:  null
   anvio:    null   # e.g. /home/ljc444/.conda/envs/anvio-9
 
 # -------------------------------------------------------------------
