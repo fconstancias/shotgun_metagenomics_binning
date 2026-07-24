@@ -15,13 +15,14 @@ A modular Snakemake pipeline for metagenomic assembly, read mapping, binning, an
 Host-removed reads
    │
    ▼
-[1] metagenome_assemble.smk   ─── Assembly (SPAdes or MEGAHIT), or symlink +
-   │                               optional Anvi'o reformat of pre-built contigs
+[1] metagenome_assemble.smk   ─── Assembly (SPAdes or MEGAHIT) or symlink to
+   │                               pre-built contigs → optional Anvi'o reformat
+   │                               → optional contigs DB + SCG taxonomy/stats
    ▼
-[2] metagenome_binning.smk    ─── Optional Anvi'o contig reformat (freshly-
-   │                               assembled contigs only) → read mapping (bowtie2)
-   │                               → strobealign aemb coverage
-   │                               → MetaBAT2 / SemiBin2 / VAMB binning
+[2] metagenome_binning.smk    ─── Read mapping (bowtie2) → strobealign aemb
+   │                               coverage → MetaBAT2 / SemiBin2 / VAMB
+   │                               binning → optional CONCOCT (via Anvi'o,
+   │                               reusing [1]'s contigs DB)
    ▼
 [3] summarise_mags.smk        ─── Optional Binette refinement, CheckM quality,
                                    GTDB-Tk taxonomy, dRep dereplication
