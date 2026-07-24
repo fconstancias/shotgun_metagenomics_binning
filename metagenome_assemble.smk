@@ -58,7 +58,7 @@ rule spades_assemble:
     output:
         contigs = f"{OUT}/assembly/spades/{{assembly_group}}/final.contigs.fa"
     log:
-        err = f"logs/assembly/spades/{{assembly_group}}.log"
+        err = f"{OUT}/logs/assembly/spades/{{assembly_group}}.log"
     conda:
         "envs/assembly.yaml"
     wildcard_constraints:
@@ -90,7 +90,7 @@ rule megahit_assemble:
     output:
         contigs = f"{OUT}/assembly/megahit/{{assembly_group}}/final.contigs.fa"
     log:
-        err = f"logs/assembly/megahit/{{assembly_group}}.log"
+        err = f"{OUT}/logs/assembly/megahit/{{assembly_group}}.log"
     conda:
         "envs/assembly.yaml"
     wildcard_constraints:

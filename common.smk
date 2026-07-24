@@ -28,7 +28,7 @@ def conda_env(name, yaml_path):
     return yaml_path
 
 # Ensure runtime directories exist before any cluster submission.
-for d in [OUT, "logs", "logs/per_rule"]:
+for d in [OUT, f"{OUT}/logs", f"{OUT}/logs/per_rule"]:
     os.makedirs(d, exist_ok=True)
 
 # Parse Sourcing Sheet
