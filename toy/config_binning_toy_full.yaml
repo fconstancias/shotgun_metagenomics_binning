@@ -12,8 +12,13 @@ anvi_reformat:      true
 anvi_min_contig_len: 1000
 
 # Run all three binners (Binette refinement now runs in summarise_mags.smk —
-# see toy/config_summarise_toy_full.yaml)
-binners:            [metabat2] #[metabat2, semibin2, vamb]
+# see toy/config_summarise_toy_full.yaml).
+# semibin2 uses -b (BAMs) directly and only runs for all-bowtie2 groups.
+# mappings_toy.tsv maps spaS144 with bowtie2 for every sample (the
+# co-assembly-style policy — SemiBin2-capable) on purpose, so this scenario
+# exercises both mapping_tool policies at once; spaS276/spaS135 keep the
+# mixed bowtie2-self + strobealign-cross policy, so semibin2 skips them.
+binners:            [metabat2, semibin2, vamb]
 
 conda_dirs:
   mapping:  /home/ljc444/.conda/snakemake_envs/953074478001cdc0d34692963ffdc07e_

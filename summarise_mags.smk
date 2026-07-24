@@ -31,7 +31,9 @@ def get_assembly_fasta(wildcards):
 
 def _dir_has_bins(path):
     return os.path.isdir(path) and bool(
-        glob.glob(os.path.join(path, "*.fa")) + glob.glob(os.path.join(path, "*.fasta"))
+        glob.glob(os.path.join(path, "*.fa"))
+        + glob.glob(os.path.join(path, "*.fasta"))
+        + glob.glob(os.path.join(path, "*.fna"))  # VAMB's bin extension
     )
 
 def get_binette_bin_dirs(wildcards):

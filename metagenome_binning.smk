@@ -14,17 +14,21 @@ METABAT2_VERBOSE = bool(METABAT2_CFG.get("verbose", True))
 RUN_CONCOCT = config.get("run_concoct", False)
 CONCOCT_CLUSTERS = config.get("concoct_clusters", [10, 15, 20])
 
-# Sample sets used to route each sample_id to exactly one of the two aemb-TSV
-# producing rules (bowtie2_bam_to_aemb vs strobealign_aemb). Assumes a given
-# sample_id always uses the same mapping_tool wherever it appears.
-BOWTIE2_SAMPLE_IDS = {s for (_, s), tool in MAPPING_TOOL_FOR.items() if tool == "bowtie2"}
-STROBEALIGN_SAMPLE_IDS = {s for (_, s), tool in MAPPING_TOOL_FOR.items() if tool == "strobealign"}
-
 # anvi-merge refuses to merge a single profile, so CONCOCT (which needs a
 # merged profile) is only requested for groups with >=2 bowtie2-mapped samples.
 concoct_capable_groups = [
     g for g in binnable_groups
     if sum(1 for s in ASM_TO_MAPPED_SAMPLES[g] if MAPPING_TOOL_FOR[(g, s)] == "bowtie2") >= 2
+]
+
+# SemiBin2's -b (BAM) and -a (strobealign-aemb) inputs are mutually exclusive
+# in a single invocation, and -a mode requires SemiBin2-specific split-contig
+# abundances (not plain whole-contig depth). So SemiBin2 only runs for groups
+# where every mapped sample is bowtie2 (typically co-assemblies), using -b
+# directly on the real BAMs; mixed bowtie2+strobealign groups skip SemiBin2.
+semibin2_capable_groups = [
+    g for g in binnable_groups
+    if all(MAPPING_TOOL_FOR[(g, s)] == "bowtie2" for s in ASM_TO_MAPPED_SAMPLES[g])
 ]
 
 ############################################
@@ -82,9 +86,9 @@ def _all_targets(wildcards):
     if binnable_groups:
         targets.append(f"{OUT}/renamed_bins/.bins_aggregated.done")
     if "semibin2" in BINNERS:
-        targets += [f"{OUT}/semibin/{g}/output_recluster_bins/" for g in binnable_groups]
+        targets += [f"{OUT}/semibin/{g}/output_recluster_bins/" for g in semibin2_capable_groups]
     if "vamb" in BINNERS:
-        targets += [f"{OUT}/vamb/{g}/clusters.tsv" for g in binnable_groups]
+        targets += [f"{OUT}/vamb/{g}/vae_clusters_unsplit.tsv" for g in binnable_groups]
     if RUN_CONCOCT:
         for g in concoct_capable_groups:
             for nc in CONCOCT_CLUSTERS:
@@ -289,51 +293,51 @@ checkpoint binning:
         """
 
 ############################################
-# Strobealign aemb coverage (SemiBin2 + VAMB)
+# Aemb-style coverage TSV (SemiBin2's -a use is gone, but VAMB still needs
+# one of these per sample)
 ############################################
 
-rule strobealign_aemb:
-    """Per (assembly_group, sample_id): fast aemb coverage shared by SemiBin2 and VAMB."""
+def get_aemb_input(wildcards):
+    """Route each (assembly_group, sample_id) pair to its own mapping_tool —
+    not just sample_id, since the same sample can use different tools for
+    different assembly groups (e.g. bowtie2 for its own assembly, strobealign
+    when cross-mapped elsewhere)."""
+    tool = MAPPING_TOOL_FOR[(wildcards.assembly_group, wildcards.sample_id)]
+    if tool == "bowtie2":
+        return {
+            "bam": f"{OUT}/mapping/{wildcards.assembly_group}/{wildcards.sample_id}.bowtie2.sorted.bam",
+            "bai": f"{OUT}/mapping/{wildcards.assembly_group}/{wildcards.sample_id}.bowtie2.sorted.bam.bai",
+        }
+    return {
+        "contigs": get_contigs_for_binning(wildcards),
+        "r1": MAPPING_READS[wildcards.sample_id][0],
+        "r2": MAPPING_READS[wildcards.sample_id][1],
+    }
+
+rule aemb_tsv:
+    """Per (assembly_group, sample_id): aemb-style coverage TSV for VAMB.
+    strobealign-mapped samples run --aemb fresh; bowtie2-mapped samples derive
+    the same (contig, depth) format from their existing BAM instead of
+    mapping a second time (values agree with real strobealign --aemb to
+    within ~1-2%)."""
     input:
-        contigs = get_contigs_for_binning,
-        r1      = lambda w: MAPPING_READS[w.sample_id][0],
-        r2      = lambda w: MAPPING_READS[w.sample_id][1]
+        unpack(get_aemb_input)
     output:
         f"{OUT}/aemb/{{assembly_group}}/{{sample_id}}.tsv"
-    wildcard_constraints:
-        sample_id = "|".join(re.escape(s) for s in STROBEALIGN_SAMPLE_IDS) or "none_placeholder"
     conda:
         conda_env("mapping", "envs/mapping.yaml")
     threads: 8
     resources:
         mem_mb = 16000,
         time   = "02:00:00"
-    shell:
-        "strobealign --aemb -t {threads} {input.contigs} {input.r1} {input.r2} > {output}"
-
-rule bowtie2_bam_to_aemb:
-    """Derive the same (contig, depth) aemb-style TSV from a sample's existing
-    bowtie2 BAM, so bowtie2-mapped samples aren't mapped a second time with
-    strobealign just to feed SemiBin2/VAMB."""
-    input:
-        bam = f"{OUT}/mapping/{{assembly_group}}/{{sample_id}}.bowtie2.sorted.bam",
-        bai = f"{OUT}/mapping/{{assembly_group}}/{{sample_id}}.bowtie2.sorted.bam.bai"
-    output:
-        f"{OUT}/aemb/{{assembly_group}}/{{sample_id}}.tsv"
-    wildcard_constraints:
-        sample_id = "|".join(re.escape(s) for s in BOWTIE2_SAMPLE_IDS) or "none_placeholder"
-    conda:
-        conda_env("binning", "envs/binning.yaml")
-    threads: 2
-    resources:
-        mem_mb = 4000,
-        time   = "00:30:00"
-    shell:
-        """
-        jgi_summarize_bam_contig_depths --outputDepth {output}.raw {input.bam}
-        awk 'BEGIN{{OFS="\\t"}} NR>1 {{print $1, $3}}' {output}.raw > {output}
-        rm {output}.raw
-        """
+    run:
+        tool = MAPPING_TOOL_FOR[(wildcards.assembly_group, wildcards.sample_id)]
+        if tool == "bowtie2":
+            shell("jgi_summarize_bam_contig_depths --outputDepth {output}.raw {input.bam}")
+            shell("awk 'BEGIN{{OFS=\"\\t\"}} NR>1 {{print $1, $3}}' {output}.raw > {output}")
+            shell("rm {output}.raw")
+        else:
+            shell("strobealign --aemb -t {threads} {input.contigs} {input.r1} {input.r2} > {output}")
 
 ############################################
 # SemiBin2
@@ -341,15 +345,21 @@ rule bowtie2_bam_to_aemb:
 
 rule semibin2_bin:
     input:
-        contigs    = get_contigs_for_binning,
-        aemb_files = lambda w: expand(
-            f"{OUT}/aemb/{w.assembly_group}/{{sample}}.tsv",
+        contigs = get_contigs_for_binning,
+        bams = lambda w: expand(
+            f"{OUT}/mapping/{w.assembly_group}/{{sample}}.bowtie2.sorted.bam",
+            sample=ASM_TO_MAPPED_SAMPLES[w.assembly_group]
+        ),
+        bais = lambda w: expand(
+            f"{OUT}/mapping/{w.assembly_group}/{{sample}}.bowtie2.sorted.bam.bai",
             sample=ASM_TO_MAPPED_SAMPLES[w.assembly_group]
         )
     output:
         directory(f"{OUT}/semibin/{{assembly_group}}/output_recluster_bins/")
     params:
         outdir = f"{OUT}/semibin/{{assembly_group}}"
+    wildcard_constraints:
+        assembly_group = "|".join(re.escape(g) for g in semibin2_capable_groups) or "none_placeholder"
     conda:
         conda_env("semibin2", "envs/semibin2.yaml")
     threads: 8
@@ -357,10 +367,10 @@ rule semibin2_bin:
         mem_mb = 32000,
         time   = "12:00:00"
     shell:
-        "SemiBin2 single_easy_bin -i {input.contigs} -a {input.aemb_files} -o {params.outdir} --threads {threads}"
+        "SemiBin2 single_easy_bin -i {input.contigs} --engine cpu -b {input.bams} -o {params.outdir} -p {threads}"
 
 ############################################
-# VAMB (latest, --aemb multi-file input)
+# VAMB (latest, --abundance_tsv from merged aemb files)
 ############################################
 
 rule vamb_bin:
@@ -371,17 +381,36 @@ rule vamb_bin:
             sample=ASM_TO_MAPPED_SAMPLES[w.assembly_group]
         )
     output:
-        f"{OUT}/vamb/{{assembly_group}}/clusters.tsv"
+        f"{OUT}/vamb/{{assembly_group}}/vae_clusters_unsplit.tsv"
     params:
-        outdir = f"{OUT}/vamb/{{assembly_group}}"
+        outdir    = f"{OUT}/vamb/{{assembly_group}}",
+        abund_tsv = f"{OUT}/vamb/{{assembly_group}}_abundance.tsv",
+        samples   = lambda w: ASM_TO_MAPPED_SAMPLES[w.assembly_group],
+        minfasta  = config.get("vamb_min_fasta_size", 200000)
     conda:
         conda_env("vamb", "envs/vamb.yaml")
     threads: 8
     resources:
         mem_mb = 64000,
         time   = "12:00:00"
-    shell:
-        "rm -rf {params.outdir} && vamb bin default --outdir {params.outdir} --fasta {input.contigs} --aemb {input.aemb_files} -t {threads}"
+    run:
+        # VAMB 5.x has no --aemb flag; it wants a single TSV with header
+        # "contigname\t<sample1>\t<sample2>..." (--abundance_tsv), so merge
+        # the per-sample aemb TSVs. --minfasta is required for VAMB to
+        # actually write per-bin FASTA files (into outdir/bins/), which
+        # Binette needs later; without it VAMB only writes cluster tables.
+        merged = None
+        for sample, path in zip(params.samples, input.aemb_files):
+            df = pd.read_csv(path, sep="\t", header=None, names=["contigname", sample]).set_index("contigname")
+            merged = df if merged is None else merged.join(df, how="outer")
+        merged = merged.fillna(0).reset_index()
+        os.makedirs(os.path.dirname(params.abund_tsv), exist_ok=True)
+        merged.to_csv(params.abund_tsv, sep="\t", index=False)
+        shell(
+            "rm -rf {params.outdir} && "
+            "vamb bin default --outdir {params.outdir} --fasta {input.contigs} "
+            "--abundance_tsv {params.abund_tsv} -p {threads} --minfasta {params.minfasta}"
+        )
 
 ############################################
 # Rename and aggregate final bins

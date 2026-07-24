@@ -6,3 +6,4 @@ dependencies:
   - bowtie2>=2.5
   - samtools>=1.17
   - strobealign
+  - metabat2  # provides jgi_summarize_bam_contig_depths, used by aemb_tsv's bowtie2 branch

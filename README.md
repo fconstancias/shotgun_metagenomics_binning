@@ -5,9 +5,9 @@ A modular Snakemake pipeline for metagenomic assembly, read mapping, binning, an
 ---
 ## TODO:
 
-- Branch with CoverM for mapping
-- option to use galah instead of Drep in summarise_mags
+- Branch with CoverM for mapping with option to use galah instead of Drep in summarise_mags
 - later: use Simka / SimkaMin to select samples for mapping
+- later: ONT data ?
 
 ## Overview
 
@@ -111,15 +111,19 @@ Defines which samples are mapped back to which assembly group for depth estimati
 | `fq2`            | ✅       | Path to reverse reads (R2). |
 | `mapping_tool`   | ✅       | `bowtie2` or `strobealign`. Resolved per `(sample_id, assembly_group)` row. |
 
-`mapping_tool` is looked up per `(sample_id, assembly_group)` pair, so **the same sample can use a different tool depending on which assembly group it's mapped to** — e.g. `bowtie2` for its own assembly (accurate self-depth) and `strobealign` for cross-mapped groups.
+`mapping_tool` is looked up per `(sample_id, assembly_group)` pair, so **the same sample can use a different tool depending on which assembly group it's mapped to**.
+
+**Recommended policy**, driven by which binners you want available for a group (see [Coverage strategy](#coverage-strategy)):
+- **Co-assembly groups → `bowtie2` for every sample.** Every sample gets a real BAM, which unlocks SemiBin2 (`-b`, direct BAM input) and CONCOCT (needs ≥2 bowtie2 profiles) in addition to MetaBAT2/VAMB.
+- **Single-sample assembly groups → `bowtie2` for the assembled sample itself** (accurate self-depth), **`strobealign` for every other cross-mapped sample** (same participant's other timepoints, or any other samples used purely for cross-sample depth signal). MetaBAT2 and VAMB both handle this mix fine; SemiBin2 and CONCOCT are skipped for these groups (see below).
 
 Example:
 ```tsv
 sample_id	assembly_group	fq1	fq2	mapping_tool
 sampleA	co_assembly_A	/data/sampleA_R1.fq.gz	/data/sampleA_R2.fq.gz	bowtie2
-sampleB	co_assembly_A	/data/sampleB_R1.fq.gz	/data/sampleB_R2.fq.gz	strobealign
-sampleA	co_assembly_B	/data/sampleA_R1.fq.gz	/data/sampleA_R2.fq.gz	strobealign
-sampleC	prebuilt_B	/data/sampleC_R1.fq.gz	/data/sampleC_R2.fq.gz	bowtie2
+sampleB	co_assembly_A	/data/sampleB_R1.fq.gz	/data/sampleB_R2.fq.gz	bowtie2
+sampleA	prebuilt_B	/data/sampleA_R1.fq.gz	/data/sampleA_R2.fq.gz	bowtie2
+sampleC	prebuilt_B	/data/sampleC_R1.fq.gz	/data/sampleC_R2.fq.gz	strobealign
 ```
 
 ---
@@ -156,18 +160,16 @@ snakemake -s metagenome_assemble.smk \
 
 #### Coverage strategy
 
-All coverage uses **strobealign** — a fast approximate aligner based on strobemers, achieving near-bowtie2 accuracy at ~10× the speed. Two paths:
-
-**Path A → MetaBAT2 depth** (driven by `mapping_tool` per sample)
+**MetaBAT2 depth** (driven by `mapping_tool` per sample)
 - `bowtie2` samples: full alignment → BAM → `jgi_summarize_bam_contig_depths` → `bowtie2_depth.txt`
-- `strobealign` samples: `--aemb` per-contig coverage → per-sample TSVs
+- `strobealign` samples: `--aemb` per-contig coverage → per-sample TSVs (bowtie2-mapped samples get an equivalent TSV derived from their own BAM instead of mapping a second time, via the same `aemb_tsv` rule — the two are numerically equivalent, within ~1-2%)
 - Both merged into `depth.txt` by `combine_depths`
 
-**Path B → SemiBin2 + VAMB** (runs for all samples regardless of `mapping_tool`)
-- `strobealign --aemb` per `(assembly_group, sample_id)` → `aemb/{group}/{sample}.tsv`
-- Same TSV files fed to both SemiBin2 (`-a *.tsv`) and VAMB (`--aemb *.tsv`) — no merge step needed
+**VAMB** — uses the same per-sample aemb-style TSVs (real or BAM-derived), merged into one `--abundance_tsv` (VAMB 5.x has no `--aemb` flag; requires a single TSV with header `contigname\t<sample>...`). `--minfasta` is set so VAMB actually writes per-bin FASTA files (`vamb/{group}/bins/*.fna`), not just its cluster table.
 
-The typical setup: `bowtie2` for each sample's own assembly, `strobealign` for all cross-mapped samples.
+**SemiBin2** — its `-b` (BAM) and `-a` (strobealign-aemb) inputs are mutually exclusive per run, and `-a` mode requires SemiBin2's own split-contig abundance format (see `SemiBin2 split_contigs`), not plain per-contig depth. Rather than adopt that extra split-contig step, SemiBin2 only runs for groups where **every** sample is bowtie2-mapped — using `-b` directly on the real BAMs, matching SemiBin2's own recommended BAM-based workflow. Mixed bowtie2+strobealign groups (typical single-sample assemblies) skip SemiBin2 automatically — see the `mapping_tool` policy above.
+
+**CONCOCT** has the same ≥2-bowtie2-samples requirement (see below) — so co-assembly groups (all-bowtie2) are where MetaBAT2, VAMB, SemiBin2, and CONCOCT all work together; single-sample assembly groups get MetaBAT2 + VAMB only.
 
 #### Steps
 
@@ -178,8 +180,8 @@ The typical setup: `bowtie2` for each sample's own assembly, `strobealign` for a
 5. **strobealign aemb** per `(group, sample)` → `aemb/{group}/{sample}.tsv`
 6. **combine_depths** → `depth.txt` (merges bowtie2 depths + strobealign aemb TSVs)
 7. **MetaBAT2** (if `metabat2` in `binners`) — uses `depth.txt`
-8. **SemiBin2** (if `semibin2` in `binners`) — uses strobealign aemb TSVs
-9. **VAMB** (if `vamb` in `binners`) — uses strobealign aemb TSVs, latest VAMB API (`vamb bin default --aemb`)
+8. **SemiBin2** (if `semibin2` in `binners`) — only for groups where every sample is bowtie2-mapped; uses `-b` directly on the BAMs
+9. **VAMB** (if `vamb` in `binners`) — merged `--abundance_tsv` from the per-sample aemb TSVs, latest VAMB API (`vamb bin default --abundance_tsv ... --minfasta ...`)
 
 Multi-binner refinement with Binette now runs later, in `summarise_mags.smk`
 (see below) — it reads this workflow's raw per-binner bin directories
@@ -195,6 +197,10 @@ assembler:      "spades"   # must match workflow 1
 
 # Binner selection: any combination of metabat2, semibin2, vamb
 binners: [metabat2]
+
+# Minimum bin size (bp) for VAMB to write it out as a FASTA file (into
+# vamb/{group}/bins/); bins below this are only listed in the cluster table.
+vamb_min_fasta_size: 200000
 
 # Optional Anvi'o contig reformat
 anvi_reformat: false
@@ -359,7 +365,7 @@ results/
 │           └── final.contigs.reformatted.fa     # if anvi_reformat: true
 ├── aemb/
 │   └── {assembly_group}/
-│       └── {sample_id}.tsv            # strobealign aemb coverage (MetaBAT2 cross-sample + SemiBin2 + VAMB)
+│       └── {sample_id}.tsv            # aemb-style coverage (real strobealign or BAM-derived) — MetaBAT2 cross-sample + VAMB
 ├── mapping/
 │   └── {assembly_group}/
 │       ├── {sample_id}.bowtie2.sorted.bam
@@ -369,12 +375,12 @@ results/
 │   └── {assembly_group}/
 │       └── bin.N.fa                   # MetaBAT2 bins
 ├── semibin/
-│   └── {assembly_group}/
+│   └── {assembly_group}/              # only for groups where every sample is bowtie2-mapped
 │       └── output_recluster_bins/     # SemiBin2 bins
 ├── vamb/
 │   └── {assembly_group}/
-│       ├── clusters.tsv
-│       └── bins/                      # VAMB bin FASTA files
+│       ├── vae_clusters_unsplit.tsv
+│       └── bins/                      # VAMB bin FASTA files (*.fna)
 ├── renamed_bins/
 │   └── {assembly_group}_bin.N.fa.gz   # raw per-binner bins, gzipped (metagenome_binning.smk)
 ├── binette/                            # produced by summarise_mags.smk, if run_binette: true
@@ -399,7 +405,7 @@ logs/
 | Environment          | Tools                                          |
 |----------------------|------------------------------------------------|
 | `envs/assembly.yaml` | SPAdes, MEGAHIT                                |
-| `envs/mapping.yaml`  | bowtie2, samtools, strobealign                 |
+| `envs/mapping.yaml`  | bowtie2, samtools, strobealign, MetaBAT2 (`jgi_summarize_bam_contig_depths`, used by `aemb_tsv`'s bowtie2 branch) |
 | `envs/binning.yaml`  | MetaBAT2 (`jgi_summarize_bam_contig_depths`)   |
 | `envs/semibin2.yaml` | SemiBin2                                       |
 | `envs/vamb.yaml`     | VAMB (latest)                                  |
@@ -471,7 +477,8 @@ snakemake -s ../metagenome_binning.smk --configfile config_binning_toy_coasm.yam
 
 Features tested:
 - `anvi_reformat: true` — simplify contig headers and filter <1000 bp before bowtie2-build
-- `binners: [metabat2, semibin2, vamb]` — all three binners run in parallel
+- `binners: [metabat2, semibin2, vamb]` — MetaBAT2 and VAMB run for all three assembly groups; SemiBin2 only runs where every sample is bowtie2-mapped
+- Both `mapping_tool` policies from [`mappings.tsv`](#mappingstsv--used-by-workflows-2-and-3) are exercised in this one scenario: `spaS144` has all 5 samples mapped with `bowtie2` (the co-assembly-style policy — SemiBin2-capable), while `spaS276`/`spaS135` keep the mixed bowtie2-self + strobealign-cross policy (SemiBin2 skipped for them)
 - `run_binette: true` (in `config_summarise_toy_full.yaml`) — Binette selects the best bins across all three using CheckM2
 
 Set `binette_checkm2_db` in `config_summarise_toy_full.yaml` to the path of your CheckM2 diamond database before running.
@@ -589,3 +596,9 @@ Known incompatibility between CONCOCT and newer scikit-learn ([merenlab/anvio#21
 ```bash
 pip install scikit-learn==1.1.0
 ```
+
+**`SemiBin2 ... Error: abundances from strobealign-aemb can only be used with at least 5 samples` / `KeyError: "None of [Index(['..._1', '..._2', ...])] are in the [index]"`**
+SemiBin2's `-a` (strobealign-aemb) mode needs ≥5 samples *and* a SemiBin2-specific split-contig abundance format (`SemiBin2 split_contigs` + aemb against the split FASTA) — plain per-contig depth doesn't have the required `_1`/`_2` rows. This pipeline sidesteps both issues by only running SemiBin2 for groups where every sample is bowtie2-mapped (see [Coverage strategy](#coverage-strategy)), using `-b` directly on the BAMs. If you see either error, the group has a mix of `bowtie2`/`strobealign` samples — that's expected; SemiBin2 is skipped for it by design.
+
+**`vamb bin default: error: unrecognized arguments: --aemb ...` / `MissingOutputException` for `vamb/{group}/clusters.tsv`**
+VAMB 5.x removed `--aemb` (needs a single `--abundance_tsv` with header `contigname\t<sample>...`) and renamed its main output from `clusters.tsv` to `vae_clusters_unsplit.tsv`. Already fixed in `vamb_bin`/`_all_targets`; if you see this on a fork/older checkout, update to the current rule.

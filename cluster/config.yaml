@@ -24,7 +24,7 @@ default-resources:
 set-threads:
   bowtie2_build: 4
   bowtie2_map_and_sort: 8
-  strobealign_aemb: 8
+  aemb_tsv: 8
   semibin2_bin: 8
   vamb_bin: 8
   binette_refine: 8
@@ -46,7 +46,7 @@ set-resources:
   bowtie2_depth:
     mem_mb: 8000
     runtime: 120
-  strobealign_aemb:
+  aemb_tsv:
     mem_mb: 16000
     runtime: 120
   combine_depths:
