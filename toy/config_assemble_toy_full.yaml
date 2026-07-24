@@ -1,3 +1,14 @@
 assemblies_tsv: "assemblies_toy.tsv"
 output_dir: "results_toy_full"
 assembler: "spades"
+
+# Must match config_binning_toy_full.yaml's anvi_reformat/anvi_min_contig_len —
+# for pre-built assemblies, reformatting now happens here (see
+# reformat_prebuilt_contigs in metagenome_assemble.smk), not in binning.
+anvi_reformat:       true
+anvi_min_contig_len: 1000
+
+# Anvi'o isn't installed via yaml — must match config_binning_toy_full.yaml's
+# conda_dirs.anvio (an existing installation, e.g. /home/ljc444/.conda/envs/anvio-9)
+conda_dirs:
+  anvio: /home/ljc444/.conda/envs/anvio-9

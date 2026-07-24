@@ -9,3 +9,14 @@ output_dir: "results"
 # -------------------------------------------------------------------
 # Options: "spades" (metaSPAdes) or "megahit"
 assembler: "spades"
+
+# Must match config_binning.yaml's anvi_reformat/anvi_min_contig_len — for
+# pre-built assemblies, reformatting happens here (reformat_prebuilt_contigs),
+# not in metagenome_binning.smk.
+anvi_reformat:       true
+anvi_min_contig_len: 1000
+
+# Anvi'o isn't installed via yaml — must match config_binning.yaml's
+# conda_dirs.anvio (an existing installation).
+conda_dirs:
+  anvio: null   # e.g. /home/ljc444/.conda/envs/anvio-9

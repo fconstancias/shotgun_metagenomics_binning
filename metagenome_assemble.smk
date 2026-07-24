@@ -4,10 +4,15 @@ include: "common.smk"
 # Symlink creation runs on the head node — no cluster node needed
 localrules: use_prebuilt_assembly
 
-# Target only assembly outputs — path encodes which assembler was used
+# Target only assembly outputs — path encodes which assembler was used.
+# For pre-built assemblies, target the reformatted contigs directly when
+# anvi_reformat is on, so metagenome_binning.smk finds them already prepared.
 rule all:
     input:
-        [f"{OUT}/assembly/{ASSEMBLER}/{g}/final.contigs.fa" for g in all_groups]
+        [f"{OUT}/assembly/{ASSEMBLER}/{g}/final.contigs.fa" for g in all_groups] + (
+            [f"{OUT}/assembly/{ASSEMBLER}/{g}/final.contigs.reformatted.fa" for g in PREBUILT_ASM]
+            if ANVI_REFORMAT else []
+        )
 
 rule use_prebuilt_assembly:
     input:
@@ -21,6 +26,31 @@ rule use_prebuilt_assembly:
         if os.path.exists(output.contigs):
             os.remove(output.contigs)
         os.symlink(os.path.abspath(input.external), output.contigs)
+
+rule reformat_prebuilt_contigs:
+    """Pre-built assemblies only — normalizes headers/filters short contigs
+    from external contigs right at ingestion time. Freshly-assembled
+    (SPAdes/MEGAHIT) contigs are reformatted in metagenome_binning.smk
+    instead (see reformat_contigs there)."""
+    input:
+        f"{OUT}/assembly/{ASSEMBLER}/{{assembly_group}}/final.contigs.fa"
+    output:
+        f"{OUT}/assembly/{ASSEMBLER}/{{assembly_group}}/final.contigs.reformatted.fa"
+    wildcard_constraints:
+        assembly_group = prebuilt_constraint
+    params:
+        min_len = config.get("anvi_min_contig_len", 1000),
+        prefix  = lambda w: w.assembly_group
+    conda:
+        config.get("conda_anvio_dir") or conda_env("anvio", "envs/anvio.yaml")
+    shell:
+        """
+        anvi-script-reformat-fasta {input} \
+            --simplify-names \
+            --min-len {params.min_len} \
+            --prefix {params.prefix} \
+            -o {output}
+        """
 
 rule spades_assemble:
     input:

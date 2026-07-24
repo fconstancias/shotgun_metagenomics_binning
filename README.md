@@ -15,11 +15,11 @@ A modular Snakemake pipeline for metagenomic assembly, read mapping, binning, an
 Host-removed reads
    │
    ▼
-[1] metagenome_assemble.smk   ─── Assembly (SPAdes or MEGAHIT)
-   │                               or symlink to pre-built contigs
+[1] metagenome_assemble.smk   ─── Assembly (SPAdes or MEGAHIT), or symlink +
+   │                               optional Anvi'o reformat of pre-built contigs
    ▼
-[2] metagenome_binning.smk    ─── Optional Anvi'o contig reformat
-   │                               → read mapping (bowtie2)
+[2] metagenome_binning.smk    ─── Optional Anvi'o contig reformat (freshly-
+   │                               assembled contigs only) → read mapping (bowtie2)
    │                               → strobealign aemb coverage
    │                               → MetaBAT2 / SemiBin2 / VAMB binning
    ▼
@@ -135,14 +135,21 @@ sampleC	prebuilt_B	/data/sampleC_R1.fq.gz	/data/sampleC_R2.fq.gz	strobealign
 **Config:** `config_assemble.yaml`
 
 For each assembly group:
-- If `assembly_path` is provided → symlinks the existing contigs into `{output_dir}/assembly/{assembler}/{group}/final.contigs.fa`
-- If not → runs **SPAdes** (`--meta`) or **MEGAHIT** depending on `assembler:` in config
+- If `assembly_path` is provided → symlinks the existing contigs into `{output_dir}/assembly/{assembler}/{group}/final.contigs.fa`, then (if `anvi_reformat: true`) reformats them via `anvi-script-reformat-fasta` into `final.contigs.reformatted.fa` right here — pre-built assemblies are external data being ingested, so header normalization/short-contig filtering belongs at this stage, not in binning.
+- If not → runs **SPAdes** (`--meta`) or **MEGAHIT** depending on `assembler:` in config (reformatting for these happens later, in `metagenome_binning.smk` — see below)
 
 Key config options:
 ```yaml
 assembler: "megahit"   # or "spades"
 output_dir: "results"
 assemblies_tsv: "assemblies.tsv"
+
+# Only used for pre-built assemblies (assembly_path set) — must match the
+# same keys in config_binning.yaml, which use them for freshly-assembled contigs
+anvi_reformat:       false
+anvi_min_contig_len: 1000
+conda_dirs:
+  anvio: null   # e.g. /home/ljc444/.conda/envs/anvio-9
 ```
 
 Run:
@@ -173,7 +180,7 @@ snakemake -s metagenome_assemble.smk \
 
 #### Steps
 
-1. **(Optional) Anvi'o contig reformat** — `anvi-script-reformat-fasta --simplify-names --min-len X --prefix {group}`. Runs before `bowtie2_build`, so the index is built from the simplified-header FASTA and everything stays consistent.
+1. **(Optional) Anvi'o contig reformat** — `anvi-script-reformat-fasta --simplify-names --min-len X --prefix {group}`. Runs before `bowtie2_build`, so the index is built from the simplified-header FASTA and everything stays consistent. **Only applies to freshly-assembled (SPAdes/MEGAHIT) contigs** — pre-built assemblies are reformatted earlier, in `metagenome_assemble.smk`'s `reformat_prebuilt_contigs`.
 2. **bowtie2-build** index (if any sample uses `bowtie2` for that group)
 3. **bowtie2 map + sort** per bowtie2 sample → BAM
 4. **bowtie2 depth** → `bowtie2_depth.txt`
@@ -476,7 +483,7 @@ snakemake -s ../metagenome_binning.smk --configfile config_binning_toy_coasm.yam
 **Output:** `results_toy_full/`
 
 Features tested:
-- `anvi_reformat: true` — simplify contig headers and filter <1000 bp before bowtie2-build
+- `anvi_reformat: true` (in both `config_assemble_toy_full.yaml` and `config_binning_toy_full.yaml`) — simplify contig headers and filter <1000 bp; for these pre-built assemblies this actually runs in step 1 (`metagenome_assemble.smk`), not step 2
 - `binners: [metabat2, semibin2, vamb]` — MetaBAT2 and VAMB run for all three assembly groups; SemiBin2 only runs where every sample is bowtie2-mapped
 - Both `mapping_tool` policies from [`mappings.tsv`](#mappingstsv--used-by-workflows-2-and-3) are exercised in this one scenario: `spaS144` has all 5 samples mapped with `bowtie2` (the co-assembly-style policy — SemiBin2-capable), while `spaS276`/`spaS135` keep the mixed bowtie2-self + strobealign-cross policy (SemiBin2 skipped for them)
 - `run_binette: true` (in `config_summarise_toy_full.yaml`) — Binette selects the best bins across all three using CheckM2
@@ -484,7 +491,7 @@ Features tested:
 Set `binette_checkm2_db` in `config_summarise_toy_full.yaml` to the path of your CheckM2 diamond database before running.
 
 ```bash
-# 1. Symlink assemblies into results_toy_full
+# 1. Symlink assemblies into results_toy_full and reformat them (anvi_reformat: true)
 snakemake -s ../metagenome_assemble.smk --configfile config_assemble_toy_full.yaml --cores 4
 
 # 2. Pre-build missing conda envs (mapping, vamb)
