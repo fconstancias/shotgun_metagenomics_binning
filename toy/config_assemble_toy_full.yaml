@@ -3,8 +3,8 @@ output_dir: "results_toy_full"
 assembler: "spades"
 
 # Must match config_binning_toy_full.yaml's anvi_reformat/anvi_min_contig_len —
-# for pre-built assemblies, reformatting now happens here (see
-# reformat_prebuilt_contigs in metagenome_assemble.smk), not in binning.
+# reformatting (reformat_contigs) always happens here, not in
+# metagenome_binning.smk (map + bin only).
 anvi_reformat:       true
 anvi_min_contig_len: 1000
 

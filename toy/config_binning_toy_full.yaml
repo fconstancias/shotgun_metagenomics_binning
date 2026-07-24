@@ -6,10 +6,10 @@ mappings_tsv:   "mappings_toy.tsv"
 output_dir:     "results_toy_full"
 assembler:      "spades"
 
-# Anvi'o reformat: simplify contig headers and filter short contigs
-# bowtie2-build runs from the reformatted FASTA so names stay consistent
+# Reformatting itself always happens in metagenome_assemble.smk (see
+# config_assemble_toy_full.yaml) — this just selects reformatted vs raw
+# contigs as input here, and must match that run's anvi_reformat value.
 anvi_reformat:      true
-anvi_min_contig_len: 1000
 
 # Run all three binners (Binette refinement now runs in summarise_mags.smk —
 # see toy/config_summarise_toy_full.yaml).

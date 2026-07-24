@@ -135,8 +135,10 @@ sampleC	prebuilt_B	/data/sampleC_R1.fq.gz	/data/sampleC_R2.fq.gz	strobealign
 **Config:** `config_assemble.yaml`
 
 For each assembly group:
-- If `assembly_path` is provided → symlinks the existing contigs into `{output_dir}/assembly/{assembler}/{group}/final.contigs.fa`, then (if `anvi_reformat: true`) reformats them via `anvi-script-reformat-fasta` into `final.contigs.reformatted.fa` right here — pre-built assemblies are external data being ingested, so header normalization/short-contig filtering belongs at this stage, not in binning.
-- If not → runs **SPAdes** (`--meta`) or **MEGAHIT** depending on `assembler:` in config (reformatting for these happens later, in `metagenome_binning.smk` — see below)
+- If `assembly_path` is provided → symlinks the existing contigs into `{output_dir}/assembly/{assembler}/{group}/final.contigs.fa`
+- If not → runs **SPAdes** (`--meta`) or **MEGAHIT** depending on `assembler:` in config
+
+Then, for **every** group (regardless of source), if `anvi_reformat: true` → reformats via `anvi-script-reformat-fasta` into `final.contigs.reformatted.fa`. This always happens here, never in `metagenome_binning.smk` — that workflow only maps and bins; `anvi_reformat` there just selects which of these two files to use as input, and must match the value used here.
 
 Key config options:
 ```yaml
@@ -209,9 +211,9 @@ binners: [metabat2]
 # vamb/{group}/bins/); bins below this are only listed in the cluster table.
 vamb_min_fasta_size: 200000
 
-# Optional Anvi'o contig reformat
+# Selects reformatted vs raw contigs as input (reformatting itself always
+# happens in metagenome_assemble.smk) — must match that run's anvi_reformat
 anvi_reformat: false
-anvi_min_contig_len: 1000
 
 # Optional: pre-installed conda env paths (skip yaml-based install)
 # Leave null to install from envs/*.yaml

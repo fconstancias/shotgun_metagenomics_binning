@@ -99,35 +99,6 @@ rule all:
     input: _all_targets
 
 ############################################
-# Anvi'o contig reformat (optional)
-############################################
-
-rule reformat_contigs:
-    """Freshly-assembled (SPAdes/MEGAHIT) contigs only — pre-built assemblies
-    are reformatted in metagenome_assemble.smk instead, right after they're
-    symlinked in, since that's a data-ingestion concern for pre-existing
-    contigs rather than something specific to binning."""
-    input:
-        f"{OUT}/assembly/{ASSEMBLER}/{{assembly_group}}/final.contigs.fa"
-    output:
-        f"{OUT}/assembly/{ASSEMBLER}/{{assembly_group}}/final.contigs.reformatted.fa"
-    wildcard_constraints:
-        assembly_group = built_constraint
-    params:
-        min_len = config.get("anvi_min_contig_len", 1000),
-        prefix  = lambda w: w.assembly_group
-    conda:
-        config.get("conda_anvio_dir") or conda_env("anvio", "envs/anvio.yaml")
-    shell:
-        """
-        anvi-script-reformat-fasta {input} \
-            --simplify-names \
-            --min-len {params.min_len} \
-            --prefix {params.prefix} \
-            -o {output}
-        """
-
-############################################
 # Read mapping: bowtie2
 ############################################
 

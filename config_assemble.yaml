@@ -10,9 +10,9 @@ output_dir: "results"
 # Options: "spades" (metaSPAdes) or "megahit"
 assembler: "spades"
 
-# Must match config_binning.yaml's anvi_reformat/anvi_min_contig_len — for
-# pre-built assemblies, reformatting happens here (reformat_prebuilt_contigs),
-# not in metagenome_binning.smk.
+# Must match config_binning.yaml's anvi_reformat/anvi_min_contig_len —
+# reformatting (reformat_contigs) always happens here, not in
+# metagenome_binning.smk (map + bin only).
 anvi_reformat:       true
 anvi_min_contig_len: 1000
 

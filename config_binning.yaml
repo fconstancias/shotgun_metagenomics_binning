@@ -40,13 +40,13 @@ conda_dirs:
   anvio:    null   # e.g. /home/ljc444/.conda/envs/anvio-9
 
 # -------------------------------------------------------------------
-# Anvi'o contig reformat (optional pre-binning step)
+# Anvi'o contig reformat (selection only — see config_assemble.yaml)
 # -------------------------------------------------------------------
-# Filter short contigs and simplify headers with anvi-script-reformat-fasta.
-# NOTE: When anvi_reformat: true, reformat runs before bowtie2-build so contig
-# names stay consistent across index, BAM, and depth table.
+# Reformatting itself (anvi-script-reformat-fasta) always happens in
+# metagenome_assemble.smk, not here — this flag just tells this workflow
+# whether to use the reformatted or raw assembly as input. Must match the
+# anvi_reformat value used for the assemble run that produced these contigs.
 anvi_reformat: false
-anvi_min_contig_len: 1000
 
 # -------------------------------------------------------------------
 # MetaBAT2 tuning

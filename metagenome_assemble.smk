@@ -5,12 +5,13 @@ include: "common.smk"
 localrules: use_prebuilt_assembly
 
 # Target only assembly outputs — path encodes which assembler was used.
-# For pre-built assemblies, target the reformatted contigs directly when
-# anvi_reformat is on, so metagenome_binning.smk finds them already prepared.
+# Target the reformatted contigs directly when anvi_reformat is on, so
+# metagenome_binning.smk finds them already prepared either way (it does no
+# reformatting itself — that's purely a mapping/binning workflow).
 rule all:
     input:
         [f"{OUT}/assembly/{ASSEMBLER}/{g}/final.contigs.fa" for g in all_groups] + (
-            [f"{OUT}/assembly/{ASSEMBLER}/{g}/final.contigs.reformatted.fa" for g in PREBUILT_ASM]
+            [f"{OUT}/assembly/{ASSEMBLER}/{g}/final.contigs.reformatted.fa" for g in all_groups]
             if ANVI_REFORMAT else []
         )
 
@@ -27,17 +28,15 @@ rule use_prebuilt_assembly:
             os.remove(output.contigs)
         os.symlink(os.path.abspath(input.external), output.contigs)
 
-rule reformat_prebuilt_contigs:
-    """Pre-built assemblies only — normalizes headers/filters short contigs
-    from external contigs right at ingestion time. Freshly-assembled
-    (SPAdes/MEGAHIT) contigs are reformatted in metagenome_binning.smk
-    instead (see reformat_contigs there)."""
+rule reformat_contigs:
+    """Normalizes headers/filters short contigs via anvi-script-reformat-fasta,
+    for both freshly-assembled and pre-built contigs — this is a one-time
+    step on the assembly output, not something metagenome_binning.smk (map +
+    bin only) needs to concern itself with."""
     input:
         f"{OUT}/assembly/{ASSEMBLER}/{{assembly_group}}/final.contigs.fa"
     output:
         f"{OUT}/assembly/{ASSEMBLER}/{{assembly_group}}/final.contigs.reformatted.fa"
-    wildcard_constraints:
-        assembly_group = prebuilt_constraint
     params:
         min_len = config.get("anvi_min_contig_len", 1000),
         prefix  = lambda w: w.assembly_group
