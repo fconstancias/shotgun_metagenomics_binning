@@ -140,16 +140,29 @@ For each assembly group:
 
 Then, for **every** group (regardless of source), if `anvi_reformat: true` → reformats via `anvi-script-reformat-fasta` into `final.contigs.reformatted.fa`. This always happens here, never in `metagenome_binning.smk` — that workflow only maps and bins; `anvi_reformat` there just selects which of these two files to use as input, and must match the value used here.
 
+Also builds the Anvi'o contigs DB (`{output_dir}/concoct/{group}/{group}.db`) whenever it's needed — either by CONCOCT (`run_concoct: true`, see below) or by the optional SCG-taxonomy/contig-stats step — so it's created exactly once per group and shared between both, rather than rebuilt separately.
+
 Key config options:
 ```yaml
 assembler: "megahit"   # or "spades"
 output_dir: "results"
 assemblies_tsv: "assemblies.tsv"
+mappings_tsv:   "mappings.tsv"   # needed for concoct_capable_groups — must match config_binning.yaml
 
-# Only used for pre-built assemblies (assembly_path set) — must match the
-# same keys in config_binning.yaml, which use them for freshly-assembled contigs
+# Reformatting — must match the same keys in config_binning.yaml, which
+# just selects reformatted-vs-raw contigs as input (see workflow 2 below)
 anvi_reformat:       false
 anvi_min_contig_len: 1000
+
+# Must match config_binning.yaml's run_concoct — whether to build the
+# contigs DB for CONCOCT-capable groups (>=2 bowtie2-mapped samples)
+run_concoct: false
+
+# Optional: anvi-run-scg-taxonomy + anvi-display-contigs-stats per group.
+# Requires anvi_reformat: true, and anvi-setup-scg-taxonomy to have been
+# run once for the anvio conda env.
+anvi_taxonomy_and_stats: false
+
 conda_dirs:
   anvio: null   # e.g. /home/ljc444/.conda/envs/anvio-9
 ```
@@ -160,6 +173,14 @@ snakemake -s metagenome_assemble.smk \
   --profile cluster/ --configfile config_assemble.yaml \
   $SNAKEMAKE_FLAGS --jobs 15 --rerun-incomplete --latency-wait 60
 ```
+
+#### Optional: SCG taxonomy + contig stats (`anvi_taxonomy_and_stats: true`)
+
+Runs on the Anvi'o contigs DB, per assembly group:
+- **`anvi-run-scg-taxonomy`** — annotates single-copy gene taxonomy directly in the contigs DB
+- **`anvi-display-contigs-stats --report-as-text`** — writes basic assembly stats (N50, contig count, etc.) to `{group}_contigs_stats.txt`
+
+Requires `anvi_reformat: true` and `anvi-setup-scg-taxonomy` to have been run once for the `anvio` conda env (one-time setup, downloads GTDB SCG reference data — not managed by this pipeline).
 
 ---
 
@@ -275,7 +296,7 @@ Verify with `anvi-cluster-contigs --help` — the `CONCOCT` section should no lo
 - Manual bin refinement workflows (each cluster count produces a separate bin set)
 
 **Workflow:**
-1. **Anvi'o contigs DB** — creates database from reformatted assembly
+1. **Anvi'o contigs DB** — created in `metagenome_assemble.smk` (`run_concoct: true` there too), not here — see workflow 1 above
 2. **HMM annotations** — adds functional markers to contigs DB
 3. **Per-sample profiling** — runs anvi-profile on each bowtie2-mapped BAM
 4. **Merge profiles** — combines all samples into one merged profile per assembly_group
@@ -292,10 +313,12 @@ concoct_clusters: [10, 15, 20]       # test multiple cluster counts
 ```
 concoct/
 ├── {assembly_group}/
-│   ├── {assembly_group}.db          # Anvi'o contigs database
-│   ├── MERGED/                       # Merged profile DB
-│   ├── concoct_{nclust}_summary/    # Anvi'o summary + HTML report
-│   └── concoct_{nclust}_bins/       # Bin FASTA files for each cluster count
+│   ├── {assembly_group}.db              # Anvi'o contigs database (from metagenome_assemble.smk)
+│   ├── {assembly_group}_contigs_stats.txt  # if anvi_taxonomy_and_stats: true
+│   ├── .taxonomy.done                   # if anvi_taxonomy_and_stats: true
+│   ├── MERGED/                          # Merged profile DB
+│   ├── concoct_{nclust}_summary/       # Anvi'o summary + HTML report
+│   └── concoct_{nclust}_bins/          # Bin FASTA files for each cluster count
 ```
 
 **Key differences from MetaBAT2:**

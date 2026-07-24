@@ -15,6 +15,8 @@ MAP_TSV = config.get("mappings_tsv", None)
 BINNERS       = config.get("binners", ["metabat2"])   # list: metabat2, semibin2, vamb
 RUN_BINETTE   = config.get("run_binette", False)       # merge binner results with Binette
 ANVI_REFORMAT = config.get("anvi_reformat", False)     # filter+rename contigs via anvi-script-reformat-fasta
+RUN_CONCOCT   = config.get("run_concoct", False)        # CONCOCT binning via Anvi'o (metagenome_binning.smk)
+ANVI_TAXONOMY_AND_STATS = config.get("anvi_taxonomy_and_stats", False)  # anvi-run-scg-taxonomy + anvi-display-contigs-stats (metagenome_assemble.smk)
 
 # Optional pre-installed conda env paths. When set, Snakemake uses the existing
 # directory instead of creating a new env from the yaml file.
@@ -80,6 +82,15 @@ all_groups = list(PREBUILT_ASM.keys()) + list(BUILT_ASM_GROUPS)
 # Assembly groups that actually have mapped samples (i.e. can be binned).
 # Shared by metagenome_binning.smk and summarise_mags.smk.
 binnable_groups = [g for g in all_groups if g in ASM_TO_MAPPED_SAMPLES]
+
+# anvi-merge refuses to merge a single profile, so CONCOCT (which needs a
+# merged profile) is only usable for groups with >=2 bowtie2-mapped samples.
+# Shared by metagenome_assemble.smk (contigs DB creation) and
+# metagenome_binning.smk (the rest of the CONCOCT track).
+concoct_capable_groups = [
+    g for g in binnable_groups
+    if sum(1 for s in ASM_TO_MAPPED_SAMPLES[g] if MAPPING_TOOL_FOR[(g, s)] == "bowtie2") >= 2
+]
 
 # snakemake -s metagenome_binning.smk --configfile config_binning.yaml --profile cluster --use-conda
 # snakemake -s metagenome_assemble.smk --configfile config_assemble.yaml --profile cluster --use-conda

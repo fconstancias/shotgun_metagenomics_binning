@@ -1,4 +1,5 @@
 assemblies_tsv: "assemblies_toy.tsv"
+mappings_tsv:   "mappings_toy.tsv"
 output_dir: "results_toy_full"
 assembler: "spades"
 
@@ -7,6 +8,11 @@ assembler: "spades"
 # metagenome_binning.smk (map + bin only).
 anvi_reformat:       true
 anvi_min_contig_len: 1000
+
+# Optional: anvi-run-scg-taxonomy + anvi-display-contigs-stats on the
+# contigs DB (requires anvi_reformat: true and anvi-setup-scg-taxonomy to
+# have been run once for the anvio conda env). Off by default.
+anvi_taxonomy_and_stats: false
 
 # Anvi'o isn't installed via yaml — must match config_binning_toy_full.yaml's
 # conda_dirs.anvio (an existing installation, e.g. /home/ljc444/.conda/envs/anvio-9)

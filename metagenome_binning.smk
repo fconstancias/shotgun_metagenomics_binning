@@ -11,15 +11,7 @@ METABAT2_MIN_CLS_SIZE = int(METABAT2_CFG.get("min_cls_size", 200000))
 METABAT2_SAVE_CLS = bool(METABAT2_CFG.get("save_cls", True))
 METABAT2_VERBOSE = bool(METABAT2_CFG.get("verbose", True))
 
-RUN_CONCOCT = config.get("run_concoct", False)
 CONCOCT_CLUSTERS = config.get("concoct_clusters", [10, 15, 20])
-
-# anvi-merge refuses to merge a single profile, so CONCOCT (which needs a
-# merged profile) is only requested for groups with >=2 bowtie2-mapped samples.
-concoct_capable_groups = [
-    g for g in binnable_groups
-    if sum(1 for s in ASM_TO_MAPPED_SAMPLES[g] if MAPPING_TOOL_FOR[(g, s)] == "bowtie2") >= 2
-]
 
 # SemiBin2's -b (BAM) and -a (strobealign-aemb) inputs are mutually exclusive
 # in a single invocation, and -a mode requires SemiBin2-specific split-contig
@@ -423,28 +415,9 @@ rule aggregate_bins_local:
 ############################################
 # CONCOCT binning via Anvi'o (separate track)
 ############################################
-
-rule anvi_gen_contigs_db:
-    input:
-        assembly = get_contigs_for_binning
-    output:
-        db = f"{OUT}/concoct/{{assembly_group}}/{{assembly_group}}.db"
-    params:
-        name = lambda w: w.assembly_group
-    conda:
-        conda_env("anvio", "envs/anvio.yaml")
-    threads: 4
-    resources:
-        mem_mb = 8000,
-        runtime = 120
-    shell:
-        """
-        mkdir -p {OUT}/concoct/{wildcards.assembly_group}
-        anvi-gen-contigs-database -T {threads} \
-            -f {input.assembly} \
-            -o {output.db} \
-            -n {params.name}
-        """
+# Contigs DB creation (anvi-gen-contigs-database) now lives in
+# metagenome_assemble.smk, shared with the optional SCG-taxonomy/stats step
+# there — {OUT}/concoct/{group}/{group}.db is a pre-existing input here.
 
 rule anvi_run_hmms:
     input:

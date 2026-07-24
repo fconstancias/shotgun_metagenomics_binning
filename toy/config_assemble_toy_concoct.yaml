@@ -1,3 +1,14 @@
 assemblies_tsv: "assemblies_toy.tsv"
+mappings_tsv:   "mappings_toy.tsv"
 output_dir: "results_toy_concoct"
 assembler: "spades"
+
+# Must match config_binning_toy_concoct.yaml — contigs DB creation
+# (anvi_gen_contigs_db) now happens here, shared with the CONCOCT track.
+anvi_reformat: false
+run_concoct:   true
+
+# Anvi'o isn't installed via yaml — must match config_binning_toy_concoct.yaml's
+# conda_dirs.anvio (an existing installation).
+conda_dirs:
+  anvio: /home/ljc444/.conda/envs/anvio-9

@@ -4,6 +4,25 @@ include: "common.smk"
 # Symlink creation runs on the head node — no cluster node needed
 localrules: use_prebuilt_assembly
 
+def get_assembly_fasta(wildcards):
+    """Return reformatted contigs if anvi_reformat else the raw assembly —
+    same convention metagenome_binning.smk uses to select its own input."""
+    base = f"{OUT}/assembly/{ASSEMBLER}/{wildcards.assembly_group}/final.contigs.fa"
+    if ANVI_REFORMAT:
+        return f"{OUT}/assembly/{ASSEMBLER}/{wildcards.assembly_group}/final.contigs.reformatted.fa"
+    return base
+
+# Contigs DB creation (anvi-gen-contigs-database) lives here, not in
+# metagenome_binning.smk, so it's shared between the CONCOCT track (binning)
+# and the optional SCG-taxonomy/contig-stats step below without being built
+# twice for the same assembly group.
+_anvi_db_targets = []
+if RUN_CONCOCT:
+    _anvi_db_targets += [f"{OUT}/concoct/{g}/{g}.db" for g in concoct_capable_groups]
+if ANVI_REFORMAT and ANVI_TAXONOMY_AND_STATS:
+    _anvi_db_targets += [f"{OUT}/concoct/{g}/.taxonomy.done" for g in all_groups]
+    _anvi_db_targets += [f"{OUT}/concoct/{g}/{g}_contigs_stats.txt" for g in all_groups]
+
 # Target only assembly outputs — path encodes which assembler was used.
 # Target the reformatted contigs directly when anvi_reformat is on, so
 # metagenome_binning.smk finds them already prepared either way (it does no
@@ -13,7 +32,7 @@ rule all:
         [f"{OUT}/assembly/{ASSEMBLER}/{g}/final.contigs.fa" for g in all_groups] + (
             [f"{OUT}/assembly/{ASSEMBLER}/{g}/final.contigs.reformatted.fa" for g in all_groups]
             if ANVI_REFORMAT else []
-        )
+        ) + _anvi_db_targets
 
 rule use_prebuilt_assembly:
     input:
@@ -50,6 +69,65 @@ rule reformat_contigs:
             --prefix {params.prefix} \
             -o {output}
         """
+
+############################################
+# Anvi'o contigs DB (CONCOCT track + optional taxonomy/stats below)
+############################################
+
+rule anvi_gen_contigs_db:
+    input:
+        assembly = get_assembly_fasta
+    output:
+        db = f"{OUT}/concoct/{{assembly_group}}/{{assembly_group}}.db"
+    params:
+        name = lambda w: w.assembly_group
+    conda:
+        conda_env("anvio", "envs/anvio.yaml")
+    threads: 4
+    resources:
+        mem_mb = 8000,
+        runtime = 120
+    shell:
+        """
+        mkdir -p {OUT}/concoct/{wildcards.assembly_group}
+        anvi-gen-contigs-database -T {threads} \
+            -f {input.assembly} \
+            -o {output.db} \
+            -n {params.name}
+        """
+
+############################################
+# Optional: SCG taxonomy + contig stats (requires anvi_reformat: true and
+# anvi_taxonomy_and_stats: true — assumes `anvi-setup-scg-taxonomy` has
+# already been run once for the anvio conda env)
+############################################
+
+rule anvi_run_scg_taxonomy:
+    input:
+        db = f"{OUT}/concoct/{{assembly_group}}/{{assembly_group}}.db"
+    output:
+        f"{OUT}/concoct/{{assembly_group}}/.taxonomy.done"
+    conda:
+        conda_env("anvio", "envs/anvio.yaml")
+    threads: 8
+    resources:
+        mem_mb = 16000,
+        runtime = 120
+    shell:
+        """
+        anvi-run-scg-taxonomy -c {input.db} -T {threads}
+        touch {output}
+        """
+
+rule anvi_contigs_stats:
+    input:
+        db = f"{OUT}/concoct/{{assembly_group}}/{{assembly_group}}.db"
+    output:
+        f"{OUT}/concoct/{{assembly_group}}/{{assembly_group}}_contigs_stats.txt"
+    conda:
+        conda_env("anvio", "envs/anvio.yaml")
+    shell:
+        "anvi-display-contigs-stats {input.db} --report-as-text -o {output}"
 
 rule spades_assemble:
     input:

@@ -2,6 +2,7 @@
 # Input Tables & Sourcing
 # -------------------------------------------------------------------
 assemblies_tsv: "assemblies_spa_single.tsv"
+mappings_tsv: "mappings_spa_single.tsv"
 output_dir: "results"
 
 # -------------------------------------------------------------------
@@ -15,6 +16,15 @@ assembler: "spades"
 # metagenome_binning.smk (map + bin only).
 anvi_reformat:       true
 anvi_min_contig_len: 1000
+
+# Also must match config_binning.yaml's run_concoct — contigs DB creation
+# (anvi_gen_contigs_db) lives here, shared with the CONCOCT track.
+run_concoct: false
+
+# Optional: anvi-run-scg-taxonomy + anvi-display-contigs-stats on the
+# contigs DB (requires anvi_reformat: true and anvi-setup-scg-taxonomy to
+# have been run once for the anvio conda env). Off by default.
+anvi_taxonomy_and_stats: false
 
 # Anvi'o isn't installed via yaml — must match config_binning.yaml's
 # conda_dirs.anvio (an existing installation).
