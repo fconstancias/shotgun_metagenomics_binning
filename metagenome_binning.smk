@@ -78,7 +78,7 @@ def _all_targets(wildcards):
     if binnable_groups:
         targets.append(f"{OUT}/renamed_bins/.bins_aggregated.done")
     if "semibin2" in BINNERS:
-        targets += [f"{OUT}/semibin/{g}/output_recluster_bins/" for g in semibin2_capable_groups]
+        targets += [f"{OUT}/semibin/{g}/output_bins/" for g in semibin2_capable_groups]
     if "vamb" in BINNERS:
         targets += [f"{OUT}/vamb/{g}/vae_clusters_unsplit.tsv" for g in binnable_groups]
     if RUN_CONCOCT:
@@ -324,9 +324,12 @@ rule semibin2_bin:
             sample=ASM_TO_MAPPED_SAMPLES[w.assembly_group]
         )
     output:
-        directory(f"{OUT}/semibin/{{assembly_group}}/output_recluster_bins/")
+        directory(f"{OUT}/semibin/{{assembly_group}}/output_bins/")
     params:
-        outdir = f"{OUT}/semibin/{{assembly_group}}"
+        outdir = f"{OUT}/semibin/{{assembly_group}}",
+        # SemiBin2 defaults to 15 epochs, ~1h/epoch even on tiny toy data —
+        # override for fast toy/test runs; leave unset for real runs.
+        epochs_flag = f"--epochs {config['semibin2_epochs']}" if config.get("semibin2_epochs") else ""
     wildcard_constraints:
         assembly_group = "|".join(re.escape(g) for g in semibin2_capable_groups) or "none_placeholder"
     conda:
@@ -336,7 +339,7 @@ rule semibin2_bin:
         mem_mb = 32000,
         time   = "12:00:00"
     shell:
-        "SemiBin2 single_easy_bin -i {input.contigs} --engine cpu -b {input.bams} -o {params.outdir} -p {threads}"
+        "SemiBin2 single_easy_bin -i {input.contigs} --engine cpu -b {input.bams} -o {params.outdir} -p {threads} {params.epochs_flag}"
 
 ############################################
 # VAMB (latest, --abundance_tsv from merged aemb files)

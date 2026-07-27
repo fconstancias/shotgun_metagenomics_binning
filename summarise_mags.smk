@@ -33,7 +33,8 @@ def _dir_has_bins(path):
     return os.path.isdir(path) and bool(
         glob.glob(os.path.join(path, "*.fa"))
         + glob.glob(os.path.join(path, "*.fasta"))
-        + glob.glob(os.path.join(path, "*.fna"))  # VAMB's bin extension
+        + glob.glob(os.path.join(path, "*.fna"))    # VAMB's bin extension
+        + glob.glob(os.path.join(path, "*.fa.gz"))  # SemiBin2's bin extension
     )
 
 def get_binette_bin_dirs(wildcards):
@@ -44,17 +45,18 @@ def get_binette_bin_dirs(wildcards):
     binning's output directories are just read as plain paths."""
     candidates = [
         f"{OUT}/bins/{wildcards.assembly_group}",
-        f"{OUT}/semibin/{wildcards.assembly_group}/output_recluster_bins",
+        f"{OUT}/semibin/{wildcards.assembly_group}/output_bins",
         f"{OUT}/vamb/{wildcards.assembly_group}/bins",
     ]
     return [d for d in candidates if _dir_has_bins(d)]
 
-rule binette_refine:
+checkpoint binette_refine:
     input:
         assembly = get_assembly_fasta,
         bin_dirs = get_binette_bin_dirs
     output:
-        f"{BINETTE_DIR}/{{assembly_group}}/final_bins_quality_reports.tsv"
+        quality_reports = f"{BINETTE_DIR}/{{assembly_group}}/final_bins_quality_reports.tsv",
+        final_bins_dir  = directory(f"{BINETTE_DIR}/{{assembly_group}}/final_bins")
     params:
         outdir     = f"{BINETTE_DIR}/{{assembly_group}}",
         bin_dirs   = lambda w, input: " ".join(input.bin_dirs),
@@ -71,12 +73,20 @@ rule binette_refine:
         binette --bin_dirs {params.bin_dirs} -c {input.assembly} -t {threads} -o {params.outdir}
         """
 
+def get_binette_bin_fasta(wildcards):
+    """Locate one Binette-refined bin's FASTA, via the binette_refine
+    checkpoint so Snakemake re-evaluates the DAG only after Binette has
+    actually run and its final bin count/names are known on disk."""
+    final_bins_dir = checkpoints.binette_refine.get(assembly_group=wildcards.assembly_group).output.final_bins_dir
+    for ext in ("fa", "fasta"):
+        p = os.path.join(final_bins_dir, f"{wildcards.bin_id}.{ext}")
+        if os.path.exists(p):
+            return p
+    raise FileNotFoundError(f"No {wildcards.bin_id}.{{fa,fasta}} in {final_bins_dir}")
+
 rule rename_binette_bin:
     input:
-        fa = lambda w: next(
-            p for p in [f"{BINETTE_DIR}/{w.assembly_group}/final_bins/{w.bin_id}.{ext}" for ext in ("fa", "fasta")]
-            if os.path.exists(p)
-        )
+        fa = get_binette_bin_fasta
     output:
         f"{BINETTE_RENAMED_DIR}/{{assembly_group}}_{{bin_id}}.fa.gz"
     wildcard_constraints:
@@ -92,10 +102,14 @@ rule rename_binette_bin:
         """
 
 def get_all_binette_renamed_bins(wildcards):
+    """Drives which rename_binette_bin jobs exist. Uses the binette_refine
+    checkpoint (not a blind glob) so Snakemake first runs Binette for every
+    group, then re-evaluates this function against its real final_bins/
+    contents instead of whatever happened to be on disk at DAG-build time."""
     renamed = []
     for group in binnable_groups:
-        bins_dir = f"{BINETTE_DIR}/{group}/final_bins/"
-        found = glob.glob(os.path.join(bins_dir, "*.fa")) + glob.glob(os.path.join(bins_dir, "*.fa.gz"))
+        final_bins_dir = checkpoints.binette_refine.get(assembly_group=group).output.final_bins_dir
+        found = glob.glob(os.path.join(final_bins_dir, "*.fa")) + glob.glob(os.path.join(final_bins_dir, "*.fa.gz"))
         for b in found:
             base = os.path.basename(b)
             if base.endswith(".fa.gz") or base.endswith(".fasta.gz"):
@@ -107,7 +121,7 @@ def get_all_binette_renamed_bins(wildcards):
 rule aggregate_binette_bins:
     input:
         renamed         = get_all_binette_renamed_bins,
-        quality_reports = [f"{BINETTE_DIR}/{g}/final_bins_quality_reports.tsv" for g in binnable_groups]
+        quality_reports = lambda w: [checkpoints.binette_refine.get(assembly_group=g).output.quality_reports for g in binnable_groups]
     output:
         f"{BINETTE_RENAMED_DIR}/.bins_aggregated.done"
     shell:

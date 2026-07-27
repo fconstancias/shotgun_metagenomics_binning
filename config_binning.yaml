@@ -12,6 +12,10 @@ assembler: "spades"
 # List of binners to run. Options: metabat2, semibin2, vamb
 binners: [metabat2]
 
+# Optional: override SemiBin2's default 15 training epochs (e.g. for faster
+# test runs on small data). Leave unset for real runs.
+# semibin2_epochs: 2
+
 # Binette (multi-binner refinement) now runs in summarise_mags.smk, not here
 # — see run_binette / binette_checkm2_db in config_summarise.yaml.
 

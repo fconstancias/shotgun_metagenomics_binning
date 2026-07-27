@@ -229,6 +229,10 @@ assembler:      "spades"   # must match workflow 1
 # Binner selection: any combination of metabat2, semibin2, vamb
 binners: [metabat2]
 
+# Optional: override SemiBin2's default 15 training epochs (~1h/epoch even
+# on small data) — e.g. for fast test runs. Leave unset for real runs.
+# semibin2_epochs: 2
+
 # Minimum bin size (bp) for VAMB to write it out as a FASTA file (into
 # vamb/{group}/bins/); bins below this are only listed in the cluster table.
 vamb_min_fasta_size: 200000
@@ -337,7 +341,7 @@ concoct/
 Operates on `.fa.gz` bins in `{output_dir}/renamed_bins/` (or `{output_dir}/binette_renamed_bins/` when `run_binette: true` — see below). Can be run on pre-existing bins without re-running the full pipeline.
 
 Steps:
-1. **(Optional) Binette** — refines the raw per-binner bins from `metagenome_binning.smk` (found directly on disk under `output_dir`: `bins/`, `semibin/*/output_recluster_bins/`, `vamb/*/bins/`), selecting the best bins across binners using CheckM2. Requires ≥2 binners to have actually produced bins for a given assembly group. Refined bins are renamed/gzipped into `binette_renamed_bins/`, which CheckM/GTDB-Tk/dRep then use instead of the raw `renamed_bins/`.
+1. **(Optional) Binette** — refines the raw per-binner bins from `metagenome_binning.smk` (found directly on disk under `output_dir`: `bins/`, `semibin/*/output_bins/`, `vamb/*/bins/`), selecting the best bins across binners using CheckM2. Requires ≥2 binners to have actually produced bins for a given assembly group. Refined bins are renamed/gzipped into `binette_renamed_bins/`, which CheckM/GTDB-Tk/dRep then use instead of the raw `renamed_bins/`.
 2. **CheckM** (v1) — lineage-aware completeness and contamination estimation
 3. **GTDB-Tk** — taxonomic classification using the GTDB reference database
 4. **dRep** — dereplication at configurable ANI thresholds, using CheckM scores to select representatives
@@ -409,7 +413,7 @@ results/
 │       └── bin.N.fa                   # MetaBAT2 bins
 ├── semibin/
 │   └── {assembly_group}/              # only for groups where every sample is bowtie2-mapped
-│       └── output_recluster_bins/     # SemiBin2 bins
+│       └── output_bins/           # SemiBin2 bins
 ├── vamb/
 │   └── {assembly_group}/
 │       ├── vae_clusters_unsplit.tsv

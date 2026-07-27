@@ -6,6 +6,10 @@
 assemblies_tsv: "assemblies_toy.tsv"
 mappings_tsv:   "mappings_toy.tsv"
 output_dir:     "results_toy_full"
+assembler:      "spades"
+# Must match the anvi_reformat value used for the assemble/binning runs that
+# produced these contigs (toy/config_assemble_toy_full.yaml, toy/config_binning_toy_full.yaml).
+anvi_reformat:  true
 
 # -------------------------------------------------------------------
 # Binette (multi-binner refinement)
