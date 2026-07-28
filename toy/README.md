@@ -12,8 +12,10 @@ reads ──▶ [1] metagenome_assemble.smk ──▶ [2] metagenome_binning.smk
 
 Files:
 - `assemblies_toy_realasm.tsv` — assembly groups + per-group assembler
-- `mappings_toy.tsv` — shared with Test B; already matches the sample/tool
-  layout this test needs, so it's reused as-is
+- `mappings_toy_realasm.tsv` — same sample/tool layout as Test B's
+  `mappings_toy.tsv`, with the co-assembly group's rows renamed to match
+  `assemblies_toy_realasm.tsv` (kept as its own file since Test B's TSV
+  still uses the old group name)
 - `config_assemble_toy_realasm.yaml`
 - `config_binning_toy_realasm.yaml`
 - `config_summarise_toy_realasm.yaml`
@@ -33,20 +35,22 @@ test (see `ASSEMBLER_FOR` in `common.smk`).
 
 | assembly_group | samples (mapping_tool)                                              | assembler | binners (via config)                  |
 |-----------------|----------------------------------------------------------------------|-----------|-----------------------------------------|
-| `spaS144`       | S_144, S_178, S_194, S_9, S_265 — **all bowtie2**                    | megahit   | metabat2, semibin2, vamb, **CONCOCT**   |
+| `spa_co1`       | S_144, S_178, S_194, S_9, S_265 — **all bowtie2**                    | megahit   | metabat2, semibin2, vamb, **CONCOCT**   |
 | `spaS276`       | S_276 (bowtie2, assembled) + S_133, S_86, S_265 (strobealign, cross) | megahit   | metabat2, vamb                          |
 | `spaS135`       | S_135 (bowtie2, assembled) + S_119, S_213, S_280 (strobealign, cross)| spades    | metabat2, vamb                          |
 
-- `spaS144` is a real **co-assembly**: all 5 samples' reads are assembled
-  together (every sample is bowtie2-mapped in `mappings_toy.tsv`), which is
-  what makes it both CONCOCT-capable (needs ≥2 bowtie2 profiles) and
-  SemiBin2-capable (needs every sample bowtie2, `-b` direct-BAM mode).
+- `spa_co1` is a real **co-assembly**: all 5 samples' reads are assembled
+  together (every sample is bowtie2-mapped in `mappings_toy_realasm.tsv`),
+  which is what makes it both CONCOCT-capable (needs ≥2 bowtie2 profiles)
+  and SemiBin2-capable (needs every sample bowtie2, `-b` direct-BAM mode).
+  The name is a short, parametrizable label (not tied to any single sample
+  ID) so additional co-assembly groups could follow as `spa_co2`, etc.
 - `spaS276` / `spaS135` are **single-sample assemblies**: only the
   bowtie2-mapped "self" sample's reads go into the assembly; the other
-  samples in `mappings_toy.tsv` are strobealign cross-mapped for depth
-  signal only, never assembled. SemiBin2 and CONCOCT are skipped for these
-  groups (mixed bowtie2+strobealign / single bowtie2 profile respectively) —
-  they still get MetaBAT2 + VAMB.
+  samples in `mappings_toy_realasm.tsv` are strobealign cross-mapped for
+  depth signal only, never assembled. SemiBin2 and CONCOCT are skipped for
+  these groups (mixed bowtie2+strobealign / single bowtie2 profile
+  respectively) — they still get MetaBAT2 + VAMB.
 
 ## Config highlights
 

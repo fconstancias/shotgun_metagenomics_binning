@@ -118,7 +118,7 @@ rule anvi_run_hmms:
         runtime = 240
     shell:
         """
-        anvi-run-hmms -c {input.db} -T {threads}
+        anvi-run-hmms -c {input.db} -T {threads} --just-do-it
         touch {output}
         """
 

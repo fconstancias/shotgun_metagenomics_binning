@@ -1,9 +1,9 @@
 sample_id	assembly_group	fq1	fq2	mapping_tool
-S_144	spaS144S178S194S9S265_co	/projects/hansen_ol-AUDIT/scratch/NILU/metagenomes/binning_smk/toy/reads/S_144_R1.fastq.gz	/projects/hansen_ol-AUDIT/scratch/NILU/metagenomes/binning_smk/toy/reads/S_144_R2.fastq.gz	bowtie2
-S_178	spaS144S178S194S9S265_co	/projects/hansen_ol-AUDIT/scratch/NILU/metagenomes/binning_smk/toy/reads/S_178_R1.fastq.gz	/projects/hansen_ol-AUDIT/scratch/NILU/metagenomes/binning_smk/toy/reads/S_178_R2.fastq.gz	bowtie2
-S_194	spaS144S178S194S9S265_co	/projects/hansen_ol-AUDIT/scratch/NILU/metagenomes/binning_smk/toy/reads/S_194_R1.fastq.gz	/projects/hansen_ol-AUDIT/scratch/NILU/metagenomes/binning_smk/toy/reads/S_194_R2.fastq.gz	bowtie2
-S_9	spaS144S178S194S9S265_co	/projects/hansen_ol-AUDIT/scratch/NILU/metagenomes/binning_smk/toy/reads/S_9_R1.fastq.gz	/projects/hansen_ol-AUDIT/scratch/NILU/metagenomes/binning_smk/toy/reads/S_9_R2.fastq.gz	bowtie2
-S_265	spaS144S178S194S9S265_co	/projects/hansen_ol-AUDIT/scratch/NILU/metagenomes/binning_smk/toy/reads/S_265_R1.fastq.gz	/projects/hansen_ol-AUDIT/scratch/NILU/metagenomes/binning_smk/toy/reads/S_265_R2.fastq.gz	bowtie2
+S_144	spa_co1	/projects/hansen_ol-AUDIT/scratch/NILU/metagenomes/binning_smk/toy/reads/S_144_R1.fastq.gz	/projects/hansen_ol-AUDIT/scratch/NILU/metagenomes/binning_smk/toy/reads/S_144_R2.fastq.gz	bowtie2
+S_178	spa_co1	/projects/hansen_ol-AUDIT/scratch/NILU/metagenomes/binning_smk/toy/reads/S_178_R1.fastq.gz	/projects/hansen_ol-AUDIT/scratch/NILU/metagenomes/binning_smk/toy/reads/S_178_R2.fastq.gz	bowtie2
+S_194	spa_co1	/projects/hansen_ol-AUDIT/scratch/NILU/metagenomes/binning_smk/toy/reads/S_194_R1.fastq.gz	/projects/hansen_ol-AUDIT/scratch/NILU/metagenomes/binning_smk/toy/reads/S_194_R2.fastq.gz	bowtie2
+S_9	spa_co1	/projects/hansen_ol-AUDIT/scratch/NILU/metagenomes/binning_smk/toy/reads/S_9_R1.fastq.gz	/projects/hansen_ol-AUDIT/scratch/NILU/metagenomes/binning_smk/toy/reads/S_9_R2.fastq.gz	bowtie2
+S_265	spa_co1	/projects/hansen_ol-AUDIT/scratch/NILU/metagenomes/binning_smk/toy/reads/S_265_R1.fastq.gz	/projects/hansen_ol-AUDIT/scratch/NILU/metagenomes/binning_smk/toy/reads/S_265_R2.fastq.gz	bowtie2
 S_276	spaS276	/projects/hansen_ol-AUDIT/scratch/NILU/metagenomes/binning_smk/toy/reads/S_276_R1.fastq.gz	/projects/hansen_ol-AUDIT/scratch/NILU/metagenomes/binning_smk/toy/reads/S_276_R2.fastq.gz	bowtie2
 S_265	spaS276	/projects/hansen_ol-AUDIT/scratch/NILU/metagenomes/binning_smk/toy/reads/S_265_R1.fastq.gz	/projects/hansen_ol-AUDIT/scratch/NILU/metagenomes/binning_smk/toy/reads/S_265_R2.fastq.gz	strobealign
 S_133	spaS276	/projects/hansen_ol-AUDIT/scratch/NILU/metagenomes/binning_smk/toy/reads/S_133_R1.fastq.gz	/projects/hansen_ol-AUDIT/scratch/NILU/metagenomes/binning_smk/toy/reads/S_133_R2.fastq.gz	strobealign
