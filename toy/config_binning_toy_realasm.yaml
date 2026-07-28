@@ -1,0 +1,50 @@
+# -------------------------------------------------------------------
+# Test C: Real assembly from reads, mixed per-group assemblers,
+# Anvi'o reformat, all binners + CONCOCT
+# -------------------------------------------------------------------
+assemblies_tsv: "assemblies_toy_realasm.tsv"
+mappings_tsv:   "mappings_toy_realasm.tsv"
+output_dir:     "results_toy_realasm"
+assembler:      "megahit"   # fallback default; per-group choice comes from
+                            # the "assembler" column in assemblies_toy_realasm.tsv
+
+# Reformatting itself always happens in metagenome_assemble.smk (see
+# config_assemble_toy_realasm.yaml) — this just selects reformatted vs raw
+# contigs as input here, and must match that run's anvi_reformat value.
+anvi_reformat: true
+
+# Run all three multi-binners (Binette refinement runs in
+# summarise_mags.smk — see toy/config_summarise_toy_realasm.yaml).
+# semibin2 uses -b (BAMs) directly and only runs for all-bowtie2 groups:
+# spaS144 (co-assembly, every sample bowtie2) is SemiBin2-capable;
+# spaS276/spaS135 (single-sample, bowtie2-self + strobealign-cross) are not.
+binners: [metabat2, semibin2, vamb]
+
+# SemiBin2 defaults to 15 training epochs (~1h/epoch even on this tiny toy
+# assembly) — drastically reduced here since this is just a toy/code-path
+# test, not meant to produce meaningful bins. Leave unset in production configs.
+semibin2_epochs: 2
+
+# CONCOCT track (via Anvi'o) — runs alongside the multi-binner track.
+# Only spaS144 qualifies (>=2 bowtie2-mapped samples); spaS276/spaS135 are
+# excluded (single bowtie2 sample each), leaving them with metabat2+vamb only.
+run_concoct: true
+concoct_clusters: [10, 15, 20]
+
+conda_dirs:
+  mapping:  /home/ljc444/.conda/snakemake_envs/953074478001cdc0d34692963ffdc07e_
+  binning:  /home/ljc444/.conda/snakemake_envs/7f98d8a39e48151911f533947efd5a37_
+  semibin2: /home/ljc444/.conda/envs/semibin
+  vamb:     /home/ljc444/.conda/snakemake_envs/7e256d09b67c0cdacf44b5594580506b_
+  anvio:    /home/ljc444/.conda/envs/anvio-9
+
+metabat2:
+  min_contig:   2000
+  max_edges:    500
+  min_cv:       1.0
+  min_cv_sum:   1.0
+  max_p:        95
+  min_s:        60
+  min_cls_size: 200000
+  save_cls:     true
+  verbose:      true

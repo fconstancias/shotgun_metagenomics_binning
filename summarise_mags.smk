@@ -24,9 +24,10 @@ rule all:
 def get_assembly_fasta(wildcards):
     """Return reformatted contigs if anvi_reformat else original assembly
     (same convention as metagenome_binning.smk's get_contigs_for_binning)."""
-    base = f"{OUT}/assembly/{ASSEMBLER}/{wildcards.assembly_group}/final.contigs.fa"
+    assembler = ASSEMBLER_FOR[wildcards.assembly_group]
+    base = f"{OUT}/assembly/{assembler}/{wildcards.assembly_group}/final.contigs.fa"
     if ANVI_REFORMAT:
-        return f"{OUT}/assembly/{ASSEMBLER}/{wildcards.assembly_group}/final.contigs.reformatted.fa"
+        return f"{OUT}/assembly/{assembler}/{wildcards.assembly_group}/final.contigs.reformatted.fa"
     return base
 
 def _dir_has_bins(path):

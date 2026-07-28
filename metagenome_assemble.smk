@@ -7,9 +7,10 @@ localrules: use_prebuilt_assembly
 def get_assembly_fasta(wildcards):
     """Return reformatted contigs if anvi_reformat else the raw assembly —
     same convention metagenome_binning.smk uses to select its own input."""
-    base = f"{OUT}/assembly/{ASSEMBLER}/{wildcards.assembly_group}/final.contigs.fa"
+    assembler = ASSEMBLER_FOR[wildcards.assembly_group]
+    base = f"{OUT}/assembly/{assembler}/{wildcards.assembly_group}/final.contigs.fa"
     if ANVI_REFORMAT:
-        return f"{OUT}/assembly/{ASSEMBLER}/{wildcards.assembly_group}/final.contigs.reformatted.fa"
+        return f"{OUT}/assembly/{assembler}/{wildcards.assembly_group}/final.contigs.reformatted.fa"
     return base
 
 # Contigs DB creation (anvi-gen-contigs-database) lives here, not in
@@ -29,8 +30,8 @@ if ANVI_REFORMAT and ANVI_TAXONOMY_AND_STATS:
 # reformatting itself — that's purely a mapping/binning workflow).
 rule all:
     input:
-        [f"{OUT}/assembly/{ASSEMBLER}/{g}/final.contigs.fa" for g in all_groups] + (
-            [f"{OUT}/assembly/{ASSEMBLER}/{g}/final.contigs.reformatted.fa" for g in all_groups]
+        [f"{OUT}/assembly/{ASSEMBLER_FOR[g]}/{g}/final.contigs.fa" for g in all_groups] + (
+            [f"{OUT}/assembly/{ASSEMBLER_FOR[g]}/{g}/final.contigs.reformatted.fa" for g in all_groups]
             if ANVI_REFORMAT else []
         ) + _anvi_db_targets
 
@@ -38,7 +39,7 @@ rule use_prebuilt_assembly:
     input:
         external = lambda w: PREBUILT_ASM[w.assembly_group]
     output:
-        contigs = f"{OUT}/assembly/{ASSEMBLER}/{{assembly_group}}/final.contigs.fa"
+        contigs = f"{OUT}/assembly/{{assembler}}/{{assembly_group}}/final.contigs.fa"
     wildcard_constraints:
         assembly_group = prebuilt_constraint
     run:
@@ -53,9 +54,9 @@ rule reformat_contigs:
     step on the assembly output, not something metagenome_binning.smk (map +
     bin only) needs to concern itself with."""
     input:
-        f"{OUT}/assembly/{ASSEMBLER}/{{assembly_group}}/final.contigs.fa"
+        f"{OUT}/assembly/{{assembler}}/{{assembly_group}}/final.contigs.fa"
     output:
-        f"{OUT}/assembly/{ASSEMBLER}/{{assembly_group}}/final.contigs.reformatted.fa"
+        f"{OUT}/assembly/{{assembler}}/{{assembly_group}}/final.contigs.reformatted.fa"
     params:
         min_len = config.get("anvi_min_contig_len", 1000),
         prefix  = lambda w: w.assembly_group
@@ -102,9 +103,29 @@ rule anvi_gen_contigs_db:
 # already been run once for the anvio conda env)
 ############################################
 
-rule anvi_run_scg_taxonomy:
+rule anvi_run_hmms:
+    """anvi-run-scg-taxonomy requires SCG HMM hits (e.g. Bacteria_71) to
+    already be annotated in the contigs DB."""
     input:
         db = f"{OUT}/concoct/{{assembly_group}}/{{assembly_group}}.db"
+    output:
+        f"{OUT}/concoct/{{assembly_group}}/.hmms.done"
+    conda:
+        conda_env("anvio", "envs/anvio.yaml")
+    threads: 8
+    resources:
+        mem_mb = 16000,
+        runtime = 240
+    shell:
+        """
+        anvi-run-hmms -c {input.db} -T {threads}
+        touch {output}
+        """
+
+rule anvi_run_scg_taxonomy:
+    input:
+        db = f"{OUT}/concoct/{{assembly_group}}/{{assembly_group}}.db",
+        hmms_done = f"{OUT}/concoct/{{assembly_group}}/.hmms.done"
     output:
         f"{OUT}/concoct/{{assembly_group}}/.taxonomy.done"
     conda:

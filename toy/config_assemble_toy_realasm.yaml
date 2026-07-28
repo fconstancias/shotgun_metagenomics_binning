@@ -1,0 +1,46 @@
+# -------------------------------------------------------------------
+# Test C: Real assembly from reads, mixed per-group assemblers, Anvi'o
+# reformat + SCG taxonomy/contig-stats, then binning + summarise (see
+# config_binning_toy_realasm.yaml / config_summarise_toy_realasm.yaml).
+#
+# Unlike Test B (config_assemble_toy_full.yaml), which symlinks pre-built
+# SPAdes scaffolds, this scenario assembles from raw reads, with the
+# assembler chosen per assembly_group via the "assembler" column in
+# assemblies_toy_realasm.tsv (falls back to the "assembler:" key below for
+# any row/TSV without that column):
+# - spaS144: real MEGAHIT co-assembly of all 5 samples (every sample is
+#   bowtie2-mapped in mappings_toy.tsv, so it's CONCOCT- and
+#   SemiBin2-capable too).
+# - spaS276: single-sample assembly (MEGAHIT), only the bowtie2-mapped
+#   "self" sample's reads (S_276); other samples in mappings_toy.tsv are
+#   strobealign cross-mapped only, never assembled.
+# - spaS135: single-sample assembly (metaSPAdes), only S_135's reads; same
+#   cross-mapping pattern as spaS276.
+# -------------------------------------------------------------------
+assemblies_tsv: "assemblies_toy_realasm.tsv"
+mappings_tsv:   "mappings_toy_realasm.tsv"
+output_dir:     "results_toy_realasm"
+assembler:      "megahit"   # fallback default; each row above sets its own
+
+# Must match config_binning_toy_realasm.yaml's anvi_reformat/anvi_min_contig_len
+# — reformatting (reformat_contigs) always happens here, not in
+# metagenome_binning.smk (map + bin only).
+anvi_reformat:       true
+anvi_min_contig_len: 1000
+
+# Optional: anvi-run-scg-taxonomy + anvi-display-contigs-stats on the
+# contigs DB. Requires anvi_reformat: true and anvi-setup-scg-taxonomy to
+# have been run once for the anvio conda env (confirmed already done here).
+anvi_taxonomy_and_stats: true
+
+# CONCOCT contigs DB — built here, consumed by metagenome_binning.smk's
+# CONCOCT track. Must match config_binning_toy_realasm.yaml's run_concoct.
+# Only spaS144 qualifies (>=2 bowtie2-mapped samples); spaS276/spaS135 have
+# just one bowtie2 sample each, so they're silently excluded from CONCOCT's
+# target list — same policy as Test B.
+run_concoct: true
+
+# Anvi'o isn't installed via yaml — must match config_binning_toy_realasm.yaml's
+# conda_dirs.anvio (an existing installation).
+conda_dirs:
+  anvio: /home/ljc444/.conda/envs/anvio-9

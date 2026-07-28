@@ -1,0 +1,8 @@
+assembly_group	assembly_path	fq1	fq2	assembler
+spaS144S178S194S9S265_co		/projects/hansen_ol-AUDIT/scratch/NILU/metagenomes/binning_smk/toy/reads/S_144_R1.fastq.gz	/projects/hansen_ol-AUDIT/scratch/NILU/metagenomes/binning_smk/toy/reads/S_144_R2.fastq.gz	megahit
+spaS144S178S194S9S265_co		/projects/hansen_ol-AUDIT/scratch/NILU/metagenomes/binning_smk/toy/reads/S_178_R1.fastq.gz	/projects/hansen_ol-AUDIT/scratch/NILU/metagenomes/binning_smk/toy/reads/S_178_R2.fastq.gz	megahit
+spaS144S178S194S9S265_co		/projects/hansen_ol-AUDIT/scratch/NILU/metagenomes/binning_smk/toy/reads/S_194_R1.fastq.gz	/projects/hansen_ol-AUDIT/scratch/NILU/metagenomes/binning_smk/toy/reads/S_194_R2.fastq.gz	megahit
+spaS144S178S194S9S265_co		/projects/hansen_ol-AUDIT/scratch/NILU/metagenomes/binning_smk/toy/reads/S_9_R1.fastq.gz	/projects/hansen_ol-AUDIT/scratch/NILU/metagenomes/binning_smk/toy/reads/S_9_R2.fastq.gz	megahit
+spaS144S178S194S9S265_co		/projects/hansen_ol-AUDIT/scratch/NILU/metagenomes/binning_smk/toy/reads/S_265_R1.fastq.gz	/projects/hansen_ol-AUDIT/scratch/NILU/metagenomes/binning_smk/toy/reads/S_265_R2.fastq.gz	megahit
+spaS276		/projects/hansen_ol-AUDIT/scratch/NILU/metagenomes/binning_smk/toy/reads/S_276_R1.fastq.gz	/projects/hansen_ol-AUDIT/scratch/NILU/metagenomes/binning_smk/toy/reads/S_276_R2.fastq.gz	megahit
+spaS135		/projects/hansen_ol-AUDIT/scratch/NILU/metagenomes/binning_smk/toy/reads/S_135_R1.fastq.gz	/projects/hansen_ol-AUDIT/scratch/NILU/metagenomes/binning_smk/toy/reads/S_135_R2.fastq.gz	spades

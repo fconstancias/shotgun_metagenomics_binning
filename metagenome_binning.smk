@@ -29,9 +29,10 @@ semibin2_capable_groups = [
 
 def get_contigs_for_binning(wildcards):
     """Return reformatted contigs if anvi_reformat else original assembly."""
-    base = f"{OUT}/assembly/{ASSEMBLER}/{wildcards.assembly_group}/final.contigs.fa"
+    assembler = ASSEMBLER_FOR[wildcards.assembly_group]
+    base = f"{OUT}/assembly/{assembler}/{wildcards.assembly_group}/final.contigs.fa"
     if ANVI_REFORMAT:
-        return f"{OUT}/assembly/{ASSEMBLER}/{wildcards.assembly_group}/final.contigs.reformatted.fa"
+        return f"{OUT}/assembly/{assembler}/{wildcards.assembly_group}/final.contigs.reformatted.fa"
     return base
 
 def get_needed_depth_files(wildcards):
@@ -98,7 +99,7 @@ rule bowtie2_build:
     input:
         assembly = get_contigs_for_binning
     output:
-        multiext(f"{OUT}/assembly/{ASSEMBLER}/{{assembly_group}}/index", ".1.bt2", ".2.bt2", ".3.bt2", ".4.bt2", ".rev.1.bt2", ".rev.2.bt2")
+        multiext(f"{OUT}/assembly/{{assembler}}/{{assembly_group}}/index", ".1.bt2", ".2.bt2", ".3.bt2", ".4.bt2", ".rev.1.bt2", ".rev.2.bt2")
     conda:
         conda_env("mapping", "envs/mapping.yaml")
     threads: 4
@@ -106,13 +107,13 @@ rule bowtie2_build:
         mem_mb = 8000,
         runtime = 120
     shell:
-        "bowtie2-build --threads {threads} {input.assembly} {OUT}/assembly/{ASSEMBLER}/{wildcards.assembly_group}/index"
+        "bowtie2-build --threads {threads} {input.assembly} {OUT}/assembly/{wildcards.assembler}/{wildcards.assembly_group}/index"
 
 rule bowtie2_map_and_sort:
     input:
         r1 = lambda w: MAPPING_READS[w.sample_id][0],
         r2 = lambda w: MAPPING_READS[w.sample_id][1],
-        index = lambda w: multiext(f"{OUT}/assembly/{ASSEMBLER}/{w.assembly_group}/index", ".1.bt2", ".2.bt2", ".3.bt2", ".4.bt2", ".rev.1.bt2", ".rev.2.bt2")
+        index = lambda w: multiext(f"{OUT}/assembly/{ASSEMBLER_FOR[w.assembly_group]}/{w.assembly_group}/index", ".1.bt2", ".2.bt2", ".3.bt2", ".4.bt2", ".rev.1.bt2", ".rev.2.bt2")
     output:
         bam = f"{OUT}/mapping/{{assembly_group}}/{{sample_id}}.bowtie2.sorted.bam",
         bai = f"{OUT}/mapping/{{assembly_group}}/{{sample_id}}.bowtie2.sorted.bam.bai"
@@ -122,9 +123,11 @@ rule bowtie2_map_and_sort:
     resources:
         mem_mb = 16000,
         runtime = 240
+    params:
+        idx_prefix = lambda w: f"{OUT}/assembly/{ASSEMBLER_FOR[w.assembly_group]}/{w.assembly_group}/index"
     shell:
         """
-        bowtie2 -x {OUT}/assembly/{ASSEMBLER}/{wildcards.assembly_group}/index -1 {input.r1} -2 {input.r2} --no-unal -p {threads} | samtools view -u -b - | samtools sort -@ {threads} -o {output.bam}
+        bowtie2 -x {params.idx_prefix} -1 {input.r1} -2 {input.r2} --no-unal -p {threads} | samtools view -u -b - | samtools sort -@ {threads} -o {output.bam}
         samtools index {output.bam}
         """
 
@@ -237,6 +240,13 @@ checkpoint binning:
         depth    = f"{OUT}/mapping/{{assembly_group}}/depth.txt"
     output:
         out_dir = directory(f"{OUT}/bins/{{assembly_group}}")
+    wildcard_constraints:
+        # Without this, Snakemake can mis-resolve a nested bin file path
+        # (e.g. requesting "bins/spaS276/bin.6.fa" as an input elsewhere)
+        # by greedily binding the whole "spaS276/bin.6.fa" string to the
+        # unconstrained assembly_group wildcard, since this directory()
+        # output otherwise matches any path nested under it.
+        assembly_group = "|".join(re.escape(g) for g in binnable_groups) or "none_placeholder"
     conda:
         conda_env("binning", "envs/binning.yaml")
     threads: 4

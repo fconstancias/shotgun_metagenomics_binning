@@ -1,0 +1,46 @@
+# -------------------------------------------------------------------
+# Test C: Real assembly from reads, mixed per-group assemblers —
+# Binette + CheckM/GTDB-Tk/dRep
+# -------------------------------------------------------------------
+# Pairs with toy/config_binning_toy_realasm.yaml — run that first (binners
+# run there), then this config to refine with Binette + CheckM/GTDB-Tk/dRep.
+assemblies_tsv: "assemblies_toy_realasm.tsv"
+mappings_tsv:   "mappings_toy_realasm.tsv"
+output_dir:     "results_toy_realasm"
+assembler:      "megahit"   # fallback default; per-group choice comes from
+                            # the "assembler" column in assemblies_toy_realasm.tsv
+# Must match the anvi_reformat value used for the assemble/binning runs that
+# produced these contigs (config_assemble_toy_realasm.yaml, config_binning_toy_realasm.yaml).
+anvi_reformat:  true
+
+# -------------------------------------------------------------------
+# Binette (multi-binner refinement)
+# -------------------------------------------------------------------
+run_binette:        true
+binette_checkm2_db: "/maps/projects/hansen_ol-AUDIT/scratch/checkm2/CheckM2_database/uniref100.KO.1.dmnd"
+
+conda_dirs:
+  binette: /home/ljc444/.conda/snakemake_envs/binette_env
+
+# -------------------------------------------------------------------
+# Post-Binning Database Paths
+# -------------------------------------------------------------------
+checkm_db_path: "/maps/projects/hansen_ol-AUDIT/scratch/NILU/Ecoli/sweep/02_insilico_pcr_snk/checkm_db"
+checkm_outdir_name: "checkm1"
+checkm_extension: "gz"
+gtdbtk_db_path: "/maps/projects/hansen_ol-AUDIT/scratch/GTDB/release232"
+gtdbtk_extension: "gz"
+gtdbtk_min_af: 0.65
+gtdbtk_pplacer_cpus: 8
+gtdbtk_write_single_copy_genes: true
+gtdbtk_keep_intermediates: true
+
+# -------------------------------------------------------------------
+# dRep Dereplication Thresholds
+# -------------------------------------------------------------------
+drep_completeness: 66
+drep_contamination: 20
+drep_primary_ani: 0.95
+drep_secondary_ani: 0.98
+drep_min_overlap: 0.30
+drep_s_algorithm: "ANIn"

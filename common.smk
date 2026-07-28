@@ -42,10 +42,20 @@ BUILT_ASM_GROUPS = set()
 ASM_READS_R1 = defaultdict(list)
 ASM_READS_R2 = defaultdict(list)
 
+# Per-group assembler override: an optional "assembler" column in
+# assemblies_tsv (same convention as mapping_tool in mappings_tsv) lets
+# different assembly groups use different assemblers in the same run.
+# Falls back to the global config's assembler for any row/TSV without it.
+HAS_ASSEMBLER_COL = "assembler" in asm_df.columns
+ASSEMBLER_FOR = {}
+
 for _, row in asm_df.iterrows():
     grp = row["assembly_group"]
     path = str(row["assembly_path"]).strip()
-    
+
+    row_assembler = str(row["assembler"]).strip() if HAS_ASSEMBLER_COL else ""
+    ASSEMBLER_FOR[grp] = row_assembler if row_assembler.lower() not in ("", "none") else ASSEMBLER
+
     if path and path.lower() != "none" and path != "":
         PREBUILT_ASM[grp] = path
     else:
