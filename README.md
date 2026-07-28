@@ -81,10 +81,12 @@ Defines assembly groups and their read inputs. Each row is one sample contributi
 
 | Column           | Required | Description |
 |------------------|----------|-------------|
-| `assembly_group` | ✅       | Group name (e.g. `co_assembly_A`, `sample01`). Multiple rows with the same group = co-assembly. |
+| `assembly_group` | ✅*      | Group name (e.g. `co_assembly_A`, `sample01`). Multiple rows with the same group = co-assembly. Can be left blank when `group_key` (below) is used to auto-generate it. |
 | `assembly_path`  | ✅       | Path to pre-built contigs (`.fa`/`.fasta`). Leave empty to assemble from reads. |
 | `fq1`            | ✅*      | Path to forward reads (R1). Required if `assembly_path` is empty. |
 | `fq2`            | ✅*      | Path to reverse reads (R2). Required if `assembly_path` is empty. |
+| `assembler`      | ❌       | Optional per-row override of `assembler:` (megahit/spades) — lets different assembly groups use different assemblers in the same run. Falls back to the config's `assembler:` key if omitted. |
+| `group_key`       | ❌       | Optional. See **auto-naming** below. |
 
 Example:
 ```tsv
@@ -97,6 +99,14 @@ prebuilt_B	/data/contigs_B.fa	None	None
 **Co-assembly and single-sample assembly** both work with the same TSV format:
 - Co-assembly: multiple rows share the same `assembly_group`.
 - Single-sample: one row per `assembly_group` (the group name is typically the sample name).
+
+#### Auto-naming assembly groups (`group_key`)
+
+Instead of inventing `assembly_group` names by hand, add a `group_key` column (e.g. a participant/cohort id) and leave `assembly_group` blank (or `None`/`auto`) on those rows. Rows sharing the same `group_key` are grouped exactly like rows sharing the same `assembly_group` today — the key just controls *grouping*, not the final name:
+- **Co-assembly** (a `group_key` shared by ≥2 rows) → named `{assembler_abbrev}_co{n}`, e.g. `spa_co1`, `mh_co2`. `n` increments per assembler, in TSV row order.
+- **Single-sample** (a `group_key` used by exactly 1 row) → named `{assembler_abbrev}_{group_key}`, e.g. `spa_S276`.
+
+`assembler_abbrev` defaults to `{"spades": "spa", "megahit": "mh"}`; override/extend via the `assembler_abbrev:` config key (a dict mapping assembler name → short label). Any row with an explicit, non-blank `assembly_group` is left untouched regardless of `group_key` — auto-naming only fills in blanks. TSVs without a `group_key` column are completely unaffected (fully backward compatible).
 
 ---
 

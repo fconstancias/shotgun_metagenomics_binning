@@ -47,6 +47,45 @@ ASM_READS_R2 = defaultdict(list)
 # different assembly groups use different assemblers in the same run.
 # Falls back to the global config's assembler for any row/TSV without it.
 HAS_ASSEMBLER_COL = "assembler" in asm_df.columns
+
+# Short labels used by auto-naming below (e.g. "spa" for spades, matching
+# this dataset's existing "spaS144"-style convention). Override/extend via
+# the assembler_abbrev config key.
+ASSEMBLER_ABBREV = config.get("assembler_abbrev", {"spades": "spa", "megahit": "mh"})
+
+# Optional auto-naming: an optional "group_key" column in assemblies_tsv
+# groups rows that should be assembled together (a shared key = co-assembly;
+# a key used by only one row = single-sample assembly) independently of the
+# final assembly_group name. Leave assembly_group blank ("None"/empty/"auto")
+# on those rows to auto-generate it as "{assembler_abbrev}_co{n}" for
+# co-assemblies (n increments per assembler) or "{assembler_abbrev}_{group_key}"
+# for single-sample assemblies. Give assembly_group explicitly to opt out.
+if "group_key" in asm_df.columns:
+    _group_key_counts = asm_df["group_key"].value_counts().to_dict()
+    _co_counters = defaultdict(int)
+    _group_key_name_cache = {}
+
+    def _assembler_for_row(row):
+        row_assembler = str(row["assembler"]).strip() if HAS_ASSEMBLER_COL else ""
+        return row_assembler if row_assembler.lower() not in ("", "none") else ASSEMBLER
+
+    def _auto_name_for_row(row):
+        gk = row["group_key"]
+        if gk not in _group_key_name_cache:
+            abbrev = ASSEMBLER_ABBREV.get(_assembler_for_row(row), _assembler_for_row(row))
+            if _group_key_counts[gk] > 1:
+                _co_counters[abbrev] += 1
+                _group_key_name_cache[gk] = f"{abbrev}_co{_co_counters[abbrev]}"
+            else:
+                _group_key_name_cache[gk] = f"{abbrev}_{gk}"
+        return _group_key_name_cache[gk]
+
+    def _resolve_assembly_group(row):
+        val = str(row["assembly_group"]).strip()
+        return _auto_name_for_row(row) if val.lower() in ("", "none", "auto") else val
+
+    asm_df["assembly_group"] = asm_df.apply(_resolve_assembly_group, axis=1)
+
 ASSEMBLER_FOR = {}
 
 for _, row in asm_df.iterrows():
