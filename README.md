@@ -511,7 +511,7 @@ Anvi'o is not installed via yaml — point `conda_dirs.anvio` in the config to a
 A toy dataset (3 SPAdes assemblies, 12 subsampled read sets) is available under `toy/`.
 All commands below are run from `toy/`, and assume the `SNAKEMAKE_FLAGS` export from [Setup](#conda-env-prefix-for-pipeline-tool-envs).
 
-Three test scenarios are provided, each with its own config pair and output directory.
+Five test scenarios are provided, each with its own config pair and output directory.
 
 ---
 
@@ -626,6 +626,41 @@ snakemake -s ../metagenome_binning.smk --configfile config_binning_toy_concoct.y
 ```
 
 The `--jobs 2` cluster test submits only 2 SLURM jobs concurrently, which is safe for validating the workflow before scaling to production (where you'd use `--jobs 20-50` depending on cluster load).
+
+---
+
+### Scenario D — Full pipeline from raw reads, mixed assemblers, auto-named co-assembly
+
+**Config files:** `config_assemble_toy_realasm.yaml` + `config_binning_toy_realasm.yaml` + `config_summarise_toy_realasm.yaml`
+**Output:** `results_toy_realasm/` — see `toy/README.md` for the full writeup (group layout, directory structure, exact commands).
+
+The most complete toy scenario — assembles from raw reads (not pre-built contigs) and exercises nearly every feature above in one run:
+- **Per-group assembler** (`assembler` column in `assemblies_toy_realasm.tsv`): `spa_co1` and `spaS276` use MEGAHIT, `spaS135` uses metaSPAdes.
+- **Auto-named co-assembly** (`group_key` column): `spa_co1` is a real 5-sample co-assembly, auto-named from its `group_key` rather than hand-typed.
+- **All binners + CONCOCT** on the co-assembly group (all bowtie2-mapped → CONCOCT- and SemiBin2-capable); `spaS276`/`spaS135` (bowtie2-self + strobealign-cross) get MetaBAT2 + VAMB only.
+- **`anvi_taxonomy_and_stats: true`** — SCG taxonomy + contig stats on the assemble side.
+- **`run_binette: true`** — refines all three binners' bins into one final set, then CheckM/GTDB-Tk/dRep.
+
+```bash
+snakemake -s ../metagenome_assemble.smk --configfile config_assemble_toy_realasm.yaml \
+  --profile ../cluster/ $SNAKEMAKE_FLAGS --rerun-incomplete --latency-wait 60
+
+snakemake -s ../metagenome_binning.smk --configfile config_binning_toy_realasm.yaml \
+  --profile ../cluster/ $SNAKEMAKE_FLAGS --rerun-incomplete --latency-wait 60
+
+snakemake -s ../summarise_mags.smk --configfile config_summarise_toy_realasm.yaml \
+  --profile ../cluster/ $SNAKEMAKE_FLAGS --rerun-incomplete --latency-wait 60
+```
+
+**The bin-count funnel**, from a real validated run (3 groups: 1 co-assembly + 2 single-sample):
+
+| Stage | Count | What happened |
+|---|---|---|
+| Raw bins across all binners | 114 | MetaBAT2 + VAMB + SemiBin2 (SemiBin2 only for the co-assembly group), summed across all 3 assembly groups |
+| After Binette refinement | 26 | Per assembly group, Binette compares the binners' bin sets for the same contigs and selects/merges the best combination — one refined set per group, not a union |
+| After dRep dereplication | 24 | Near-identical genomes (e.g. the same organism recovered redundantly by different binners) are collapsed to one representative per ANI cluster |
+
+Each stage is a real reduction step, not just renaming — the counts above will differ run to run (especially with `semibin2_epochs` reduced for toy speed, which directly affects SemiBin2's bin quality/count).
 
 ---
 

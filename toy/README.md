@@ -1,4 +1,4 @@
-# Test C — full pipeline from raw reads (mixed assemblers + CONCOCT)
+# Scenario D — full pipeline from raw reads (mixed assemblers + CONCOCT)
 
 This test exercises the complete 3-workflow pipeline end-to-end, starting
 from raw reads rather than pre-built assemblies:

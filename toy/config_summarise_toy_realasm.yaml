@@ -1,5 +1,5 @@
 # -------------------------------------------------------------------
-# Test C: Real assembly from reads, mixed per-group assemblers —
+# Scenario D: Real assembly from reads, mixed per-group assemblers —
 # Binette + CheckM/GTDB-Tk/dRep
 # -------------------------------------------------------------------
 # Pairs with toy/config_binning_toy_realasm.yaml — run that first (binners

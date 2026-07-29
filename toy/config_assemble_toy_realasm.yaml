@@ -1,5 +1,5 @@
 # -------------------------------------------------------------------
-# Test C: Real assembly from reads, mixed per-group assemblers, Anvi'o
+# Scenario D: Real assembly from reads, mixed per-group assemblers, Anvi'o
 # reformat + SCG taxonomy/contig-stats, then binning + summarise (see
 # config_binning_toy_realasm.yaml / config_summarise_toy_realasm.yaml).
 #
