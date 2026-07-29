@@ -64,9 +64,6 @@ set-resources:
   binette_refine:
     mem_mb: 32000
     runtime: 720
-  rename_bin:
-    mem_mb: 2000
-    runtime: 60
   aggregate_bins_local:
     mem_mb: 2000
     runtime: 60

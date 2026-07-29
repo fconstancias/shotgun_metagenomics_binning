@@ -351,10 +351,49 @@ concoct/
 Operates on `.fa.gz` bins in `{output_dir}/renamed_bins/` (or `{output_dir}/binette_renamed_bins/` when `run_binette: true` — see below). Can be run on pre-existing bins without re-running the full pipeline.
 
 Steps:
-1. **(Optional) Binette** — refines the raw per-binner bins from `metagenome_binning.smk` (found directly on disk under `output_dir`: `bins/`, `semibin/*/output_bins/`, `vamb/*/bins/`), selecting the best bins across binners using CheckM2. Requires ≥2 binners to have actually produced bins for a given assembly group. Refined bins are renamed/gzipped into `binette_renamed_bins/`, which CheckM/GTDB-Tk/dRep then use instead of the raw `renamed_bins/`.
+1. **(Optional) Binette** — refines the raw per-binner bins from `metagenome_binning.smk` (found directly on disk under `output_dir`: `metabat2/{group}/`, `semibin/{group}/output_bins/`, `vamb/{group}/bins/`), selecting the best bins across binners using CheckM2. Requires ≥2 binners to have actually produced bins for a given assembly group. Refined bins are renamed/gzipped into `binette_renamed_bins/`, which CheckM/GTDB-Tk/dRep then use instead of the raw `renamed_bins/`.
 2. **CheckM** (v1) — lineage-aware completeness and contamination estimation
 3. **GTDB-Tk** — taxonomic classification using the GTDB reference database
 4. **dRep** — dereplication at configurable ANI thresholds, using CheckM scores to select representatives
+
+#### Bin naming convention
+
+`metagenome_binning.smk` renames every binner's bins in place, right after
+that binner runs, normalizing to a single `.fa.gz` extension so downstream
+tools never need to special-case per-binner formats:
+
+| Binner   | Raw filename        | Renamed to                          |
+|----------|----------------------|--------------------------------------|
+| MetaBAT2 | `bin.N.fa`           | `{assembly_group}_metabat2_bin.N.fa.gz` |
+| VAMB     | `{id}.fna`           | `{assembly_group}_vamb_{id}.fa.gz`     |
+| SemiBin2 | `SemiBin_N.fa.gz`    | `{assembly_group}_SemiBin_N.fa.gz`     |
+
+`renamed_bins/` (used when `run_binette: false`) is populated by symlinking
+(not copying) every binner's already-renamed bins into one directory, so
+CheckM/GTDB-Tk/dRep see all binners, not just MetaBAT2.
+
+#### Using bins from outside this pipeline
+
+`summarise_mags.smk` doesn't require its bins to have come from
+`metagenome_binning.smk`:
+- **Without Binette** (`run_binette: false`): CheckM/dRep/GTDB-Tk only ever
+  read `{output_dir}/renamed_bins/*.fa.gz` — drop any gzipped FASTA bins in
+  there directly (naming is not enforced) and run the workflow. A valid
+  `assemblies_tsv` is still required (parsed unconditionally by
+  `common.smk`), but its content is irrelevant to this path since nothing
+  here reads assembly contigs.
+- **With Binette**: bins need to land in a directory `get_binette_bin_dirs`
+  recognizes for the matching `assembly_group` — the three above, or any
+  directory listed in the optional `extra_binner_dirs` config key (path
+  templates using `{output_dir}`/`{assembly_group}` placeholders), e.g.:
+  ```yaml
+  extra_binner_dirs:
+    - "{output_dir}/binnerY/{assembly_group}/bins"
+    - "/absolute/path/binnerZ_results/{assembly_group}"
+  ```
+  Binette itself doesn't care about filenames, only extensions
+  (`.fa`/`.fasta`/`.fna`, optionally gzipped) — bins named however you like
+  (`binXXXX.fa`, `binYYY.fa`, ...) are all picked up.
 
 Note: Binette's own CheckM2-based quality report and the separate CheckM1 run
 above both estimate completeness/contamination — CheckM1 always runs
@@ -418,18 +457,20 @@ results/
 │       ├── {sample_id}.bowtie2.sorted.bam
 │       ├── bowtie2_depth.txt
 │       └── depth.txt                  # merged depth table (MetaBAT2 input)
-├── bins/
+├── metabat2/
 │   └── {assembly_group}/
-│       └── bin.N.fa                   # MetaBAT2 bins
+│       └── {assembly_group}_metabat2_bin.N.fa.gz   # renamed+gzipped in place
 ├── semibin/
 │   └── {assembly_group}/              # only for groups where every sample is bowtie2-mapped
-│       └── output_bins/           # SemiBin2 bins
+│       └── output_bins/
+│           └── {assembly_group}_SemiBin_N.fa.gz    # renamed in place (already gzipped)
 ├── vamb/
 │   └── {assembly_group}/
 │       ├── vae_clusters_unsplit.tsv
-│       └── bins/                      # VAMB bin FASTA files (*.fna)
+│       └── bins/
+│           └── {assembly_group}_vamb_{id}.fa.gz    # renamed+gzipped in place
 ├── renamed_bins/
-│   └── {assembly_group}_bin.N.fa.gz   # raw per-binner bins, gzipped (metagenome_binning.smk)
+│   └── {assembly_group}_{binner}_....fa.gz   # symlinks into the three dirs above (metagenome_binning.smk)
 ├── binette/                            # produced by summarise_mags.smk, if run_binette: true
 │   └── {assembly_group}/
 │       ├── final_bins_quality_reports.tsv

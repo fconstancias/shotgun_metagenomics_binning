@@ -34,9 +34,17 @@ def _dir_has_bins(path):
     return os.path.isdir(path) and bool(
         glob.glob(os.path.join(path, "*.fa"))
         + glob.glob(os.path.join(path, "*.fasta"))
-        + glob.glob(os.path.join(path, "*.fna"))    # VAMB's bin extension
-        + glob.glob(os.path.join(path, "*.fa.gz"))  # SemiBin2's bin extension
+        + glob.glob(os.path.join(path, "*.fna"))    # legacy/pre-existing VAMB output (unrenamed)
+        + glob.glob(os.path.join(path, "*.fa.gz"))  # all binners' renamed-in-place bins, incl. VAMB
     )
+
+# Optional: extra binner directories for binette --bin_dirs, beyond the
+# three this pipeline produces itself. Each entry is a path template
+# formatted with output_dir/assembly_group, e.g.:
+#   extra_binner_dirs:
+#     - "{output_dir}/binnerY/{assembly_group}/bins"
+#     - "/absolute/path/binnerZ_results/{assembly_group}"
+EXTRA_BINNER_DIRS = config.get("extra_binner_dirs", [])
 
 def get_binette_bin_dirs(wildcards):
     """Return list of binner output dirs for binette --bin_dirs, discovered
@@ -45,9 +53,12 @@ def get_binette_bin_dirs(wildcards):
     binning has already finished, so there is no checkpoint to query here —
     binning's output directories are just read as plain paths."""
     candidates = [
-        f"{OUT}/bins/{wildcards.assembly_group}",
+        f"{OUT}/metabat2/{wildcards.assembly_group}",
         f"{OUT}/semibin/{wildcards.assembly_group}/output_bins",
         f"{OUT}/vamb/{wildcards.assembly_group}/bins",
+    ] + [
+        tpl.format(output_dir=OUT, assembly_group=wildcards.assembly_group)
+        for tpl in EXTRA_BINNER_DIRS
     ]
     return [d for d in candidates if _dir_has_bins(d)]
 
@@ -191,6 +202,12 @@ rule generate_drep_info:
         out_rows = []
         for _, row in df_cm.iterrows():
             bin_id = str(row[bin_col])
+            # CheckM strips the whole compound extension (e.g. a bin
+            # scanned with -x gz named "foo.fa.gz" is reported as just
+            # "foo", not "foo.fa") -- every bin in bin_source_dir() is
+            # normalized to ".fa.gz" (see metagenome_binning.smk's in-place
+            # per-binner renaming and rename_binette_bin), so re-append
+            # exactly that to match the real filename on disk.
             if not bin_id.endswith(".fa.gz"):
                 bin_id = f"{bin_id}.fa.gz"
             out_rows.append({

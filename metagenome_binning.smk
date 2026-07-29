@@ -48,22 +48,21 @@ def get_needed_depth_files(wildcards):
                   if MAPPING_TOOL_FOR[(wildcards.assembly_group, s)] == "strobealign"]
     return paths
 
-def get_all_renamed_bins(wildcards):
-    renamed_bins = []
-    for group in all_groups:
-        if group not in ASM_TO_MAPPED_SAMPLES:
-            continue
-        checkpoint_dir = checkpoints.binning.get(assembly_group=group).output.out_dir
-        found_bins = glob.glob(os.path.join(checkpoint_dir, "bin.*.fa")) + \
-                     glob.glob(os.path.join(checkpoint_dir, "bin.*.fasta")) + \
-                     glob.glob(os.path.join(checkpoint_dir, "bin.*.fa.gz"))
-        for b in found_bins:
-            bin_base = os.path.basename(b)
-            if bin_base.endswith(".fa.gz") or bin_base.endswith(".fasta.gz"):
-                renamed_bins.append(f"{OUT}/renamed_bins/{group}_{bin_base}")
-            else:
-                renamed_bins.append(f"{OUT}/renamed_bins/{group}_{bin_base}.gz")
-    return renamed_bins
+def get_all_bin_source_dirs(wildcards):
+    """Dependencies for aggregate_bins_local: each binner already renames its
+    own bins in place (assembly_group + binner baked into the filename), so
+    this only needs to force correct scheduling order, not enumerate files —
+    the actual discovery happens at run time inside aggregate_bins_local
+    itself. MetaBAT2 uses the binning checkpoint (its bin count is dynamic);
+    VAMB/SemiBin2 use their own concrete tracked outputs."""
+    paths = []
+    for group in binnable_groups:
+        paths.append(checkpoints.binning.get(assembly_group=group).output.out_dir)
+    if "vamb" in BINNERS:
+        paths += [f"{OUT}/vamb/{g}/vae_clusters_unsplit.tsv" for g in binnable_groups]
+    if "semibin2" in BINNERS:
+        paths += [f"{OUT}/semibin/{g}/output_bins/" for g in semibin2_capable_groups]
+    return paths
 
 def get_bowtie2_samples(wildcards):
     """Return list of samples mapped with bowtie2 to this assembly_group."""
@@ -239,10 +238,10 @@ checkpoint binning:
         assembly = get_contigs_for_binning,
         depth    = f"{OUT}/mapping/{{assembly_group}}/depth.txt"
     output:
-        out_dir = directory(f"{OUT}/bins/{{assembly_group}}")
+        out_dir = directory(f"{OUT}/metabat2/{{assembly_group}}")
     wildcard_constraints:
         # Without this, Snakemake can mis-resolve a nested bin file path
-        # (e.g. requesting "bins/spaS276/bin.6.fa" as an input elsewhere)
+        # (e.g. requesting "metabat2/spaS276/bin.6.fa" as an input elsewhere)
         # by greedily binding the whole "spaS276/bin.6.fa" string to the
         # unconstrained assembly_group wildcard, since this directory()
         # output otherwise matches any path nested under it.
@@ -269,6 +268,20 @@ checkpoint binning:
           --minContig {params.min_contig} --maxEdges {params.max_edges} --minCV {params.min_cv} \
           --minCVSum {params.min_cv_sum} --maxP {params.max_p} --minS {params.min_s} \
           --minClsSize {params.min_cls_size}{params.extra_flags}
+
+        # Rename+gzip in place so every bin's file name carries its
+        # assembly group and binner (matches the same convention applied to
+        # VAMB/SemiBin2 below), and is directly identifiable in downstream
+        # CheckM/GTDB-Tk/dRep reports. The --saveCls cluster table (named
+        # literally "bin", no extension) is untouched by this glob.
+        cd {output.out_dir}
+        for f in bin.*.fa; do
+            [ -e "$f" ] || continue
+            bin_id="${{f#bin.}}"
+            bin_id="${{bin_id%.fa}}"
+            gzip -c "$f" > "{wildcards.assembly_group}_metabat2_bin.${{bin_id}}.fa.gz"
+            rm "$f"
+        done
         """
 
 ############################################
@@ -349,7 +362,17 @@ rule semibin2_bin:
         mem_mb = 32000,
         time   = "12:00:00"
     shell:
-        "SemiBin2 single_easy_bin -i {input.contigs} --engine cpu -b {input.bams} -o {params.outdir} -p {threads} {params.epochs_flag}"
+        """
+        SemiBin2 single_easy_bin -i {input.contigs} --engine cpu -b {input.bams} -o {params.outdir} -p {threads} {params.epochs_flag}
+
+        # Rename in place (already gzipped) so each bin carries its
+        # assembly group, matching the convention applied to MetaBAT2/VAMB.
+        cd {output}
+        for f in SemiBin_*.fa.gz; do
+            [ -e "$f" ] || continue
+            mv "$f" "{wildcards.assembly_group}_$f"
+        done
+        """
 
 ############################################
 # VAMB (latest, --abundance_tsv from merged aemb files)
@@ -391,39 +414,60 @@ rule vamb_bin:
         shell(
             "rm -rf {params.outdir} && "
             "vamb bin default --outdir {params.outdir} --fasta {input.contigs} "
-            "--abundance_tsv {params.abund_tsv} -p {threads} --minfasta {params.minfasta}"
+            "--abundance_tsv {params.abund_tsv} -p {threads} --minfasta {params.minfasta} && "
+            # Rename+gzip in place, normalizing extension to .fa.gz (same as
+            # MetaBAT2/SemiBin2) so every binner's output can be scanned with
+            # one glob/one -x extension downstream — no reason to keep VAMB's
+            # own ".fna" convention once it's just being read as FASTA.
+            "if [ -d {params.outdir}/bins ]; then "
+            "  cd {params.outdir}/bins && "
+            "  for f in *.fna; do "
+            "    [ -e \"$f\" ] || continue; "
+            "    id=\"${{f%.fna}}\"; "
+            "    gzip -c \"$f\" > \"{wildcards.assembly_group}_vamb_${{id}}.fa.gz\"; "
+            "    rm \"$f\"; "
+            "  done; "
+            "fi"
         )
 
 ############################################
-# Rename and aggregate final bins
+# Aggregate final bins (across all binners)
 ############################################
-
-rule rename_bin:
-    input:
-        fa = lambda w: next(
-            p for p in [f"{OUT}/bins/{w.assembly_group}/{w.bin_id}.{ext}" for ext in ("fa", "fasta")]
-            if os.path.exists(p)
-        )
-    output:
-        f"{OUT}/renamed_bins/{{assembly_group}}_{{bin_id}}.fa.gz"
-    wildcard_constraints:
-        assembly_group = "|".join(re.escape(g) for g in binnable_groups)
-    shell:
-        """
-        mkdir -p {OUT}/renamed_bins
-        gzip -c {input.fa} > {output}
-        """
+# Each binner (metabat2/vamb/semibin2 above) already renames its own bins
+# in place as "{assembly_group}_{binner}_..." — no separate per-bin rename
+# rule needed. This just symlinks all of them into one directory so
+# summarise_mags.smk's non-Binette fallback (run_binette: false) can hand
+# CheckM/GTDB-Tk/dRep a single --genome_dir covering every binner, not just
+# MetaBAT2.
 
 rule aggregate_bins_local:
     input:
-        renamed = get_all_renamed_bins
+        bin_source_dirs = get_all_bin_source_dirs
     output:
         f"{OUT}/renamed_bins/.bins_aggregated.done"
-    shell:
-        """
-        mkdir -p {OUT}/renamed_bins
-        touch {output}
-        """
+    run:
+        os.makedirs(f"{OUT}/renamed_bins", exist_ok=True)
+
+        def _link_all(pattern):
+            for f in glob.glob(pattern):
+                dest = os.path.join(f"{OUT}/renamed_bins", os.path.basename(f))
+                if not os.path.exists(dest):
+                    os.symlink(os.path.abspath(f), dest)
+
+        for group in binnable_groups:
+            checkpoint_dir = checkpoints.binning.get(assembly_group=group).output.out_dir
+            _link_all(os.path.join(checkpoint_dir, "*_metabat2_bin.*.fa.gz"))
+
+        if "vamb" in BINNERS:
+            for group in binnable_groups:
+                _link_all(f"{OUT}/vamb/{group}/bins/*_vamb_*.fa.gz")
+
+        if "semibin2" in BINNERS:
+            for group in semibin2_capable_groups:
+                _link_all(f"{OUT}/semibin/{group}/output_bins/{group}_SemiBin_*.fa.gz")
+
+        with open(output[0], "w"):
+            pass
 
 ############################################
 # CONCOCT binning via Anvi'o (separate track)
