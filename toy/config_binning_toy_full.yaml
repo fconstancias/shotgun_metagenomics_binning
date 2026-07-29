@@ -1,5 +1,5 @@
 # -------------------------------------------------------------------
-# Test B: Pre-existing assemblies, Anvi'o reformat, all binners, Binette
+# Scenario B: Pre-existing assemblies, Anvi'o reformat, all binners, Binette
 # -------------------------------------------------------------------
 assemblies_tsv: "assemblies_toy.tsv"
 mappings_tsv:   "mappings_toy.tsv"

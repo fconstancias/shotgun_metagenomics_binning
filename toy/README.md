@@ -12,9 +12,9 @@ reads ──▶ [1] metagenome_assemble.smk ──▶ [2] metagenome_binning.smk
 
 Files:
 - `assemblies_toy_realasm.tsv` — assembly groups + per-group assembler
-- `mappings_toy_realasm.tsv` — same sample/tool layout as Test B's
+- `mappings_toy_realasm.tsv` — same sample/tool layout as Scenario B's
   `mappings_toy.tsv`, with the co-assembly group's rows renamed to match
-  `assemblies_toy_realasm.tsv` (kept as its own file since Test B's TSV
+  `assemblies_toy_realasm.tsv` (kept as its own file since Scenario B's TSV
   still uses the old group name)
 - `config_assemble_toy_realasm.yaml`
 - `config_binning_toy_realasm.yaml`
@@ -22,9 +22,9 @@ Files:
 
 Output lands in `results_toy_realasm/`.
 
-## What makes this test different from Test B (`*_toy_full.yaml`)
+## What makes this test different from Scenario B (`*_toy_full.yaml`)
 
-Test B symlinks pre-built SPAdes scaffolds (`assemblies_toy.tsv`). This test
+Scenario B symlinks pre-built SPAdes scaffolds (`assemblies_toy.tsv`). This test
 (`assemblies_toy_realasm.tsv`) assembles from raw reads instead, and uses a
 **different assembler per assembly group** via a per-row `assembler` column
 in the TSV (falls back to the config's global `assembler:` key for any

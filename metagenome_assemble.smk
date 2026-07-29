@@ -61,7 +61,7 @@ rule reformat_contigs:
         min_len = config.get("anvi_min_contig_len", 1000),
         prefix  = lambda w: w.assembly_group
     conda:
-        config.get("conda_anvio_dir") or conda_env("anvio", "envs/anvio.yaml")
+        conda_env("anvio", "envs/anvio.yaml")
     shell:
         """
         anvi-script-reformat-fasta {input} \

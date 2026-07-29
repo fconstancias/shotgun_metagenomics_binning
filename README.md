@@ -48,10 +48,10 @@ Snakemake reads `CONDA_EXE` to call conda directly, bypassing the shell function
 
 ### Conda env prefix for pipeline tool envs
 
-All pipeline tool envs (mapping, binning, semibin2, vamb, binette, …) are installed once into a shared prefix and reused across runs. Every run command below assumes these two exports:
+All pipeline tool envs (mapping, binning, semibin2, vamb, binette, …) are installed once into a shared prefix and reused across runs. Every run command below assumes these two exports — pick any writable directory for `CONDA_PREFIX` (first run builds each env there; later runs reuse them):
 
 ```bash
-export CONDA_PREFIX=/home/ljc444/.conda/snakemake_envs
+export CONDA_PREFIX=/path/to/your/shared/conda_envs   # e.g. ~/.conda/snakemake_envs
 export SNAKEMAKE_FLAGS="--use-conda --conda-frontend conda --conda-prefix $CONDA_PREFIX"
 ```
 
@@ -70,6 +70,35 @@ default-resources:
   slurm_account:   cbmr           # find yours with: sacctmgr -n -s list user "$USER" format=account
   slurm_partition: standardqueue  # find available partitions with: sinfo -o "%P %l %D %c %m"
 ```
+
+### External reference databases
+
+Needed for `summarise_mags.smk` (CheckM/GTDB-Tk/Binette) and the optional
+`anvi_taxonomy_and_stats` step — none of these are downloaded by the
+pipeline itself, and none are small:
+
+```bash
+# CheckM v1 (checkm_db_path)
+mkdir -p /path/to/checkm_db && cd /path/to/checkm_db
+wget https://data.ace.uq.edu.au/public/CheckM_databases/checkm_data_2015_01_16.tar.gz
+tar -xzf checkm_data_2015_01_16.tar.gz
+
+# GTDB-Tk (gtdbtk_db_path) — the download-db.sh script ships with the
+# gtdbtk conda package; run it from inside that env. Large (100GB+).
+conda activate <your gtdbtk env>
+download-db.sh
+
+# CheckM2 (binette_checkm2_db, used internally by Binette)
+conda activate <your binette/checkm2 env>
+checkm2 database --download --path /path/to/checkm2_db
+
+# Anvi'o SCG taxonomy (only if anvi_taxonomy_and_stats: true)
+conda activate <your anvio env>
+anvi-setup-scg-taxonomy
+```
+
+Point `checkm_db_path`, `gtdbtk_db_path`, and `binette_checkm2_db` in your
+config at wherever you put these.
 
 ---
 

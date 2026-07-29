@@ -3,7 +3,7 @@
 # reformat + SCG taxonomy/contig-stats, then binning + summarise (see
 # config_binning_toy_realasm.yaml / config_summarise_toy_realasm.yaml).
 #
-# Unlike Test B (config_assemble_toy_full.yaml), which symlinks pre-built
+# Unlike Scenario B (config_assemble_toy_full.yaml), which symlinks pre-built
 # SPAdes scaffolds, this scenario assembles from raw reads, with the
 # assembler chosen per assembly_group via the "assembler" column in
 # assemblies_toy_realasm.tsv (falls back to the "assembler:" key below for
@@ -37,7 +37,7 @@ anvi_taxonomy_and_stats: true
 # CONCOCT track. Must match config_binning_toy_realasm.yaml's run_concoct.
 # Only spaS144 qualifies (>=2 bowtie2-mapped samples); spaS276/spaS135 have
 # just one bowtie2 sample each, so they're silently excluded from CONCOCT's
-# target list — same policy as Test B.
+# target list — same policy as Scenario B.
 run_concoct: true
 
 # Anvi'o isn't installed via yaml — must match config_binning_toy_realasm.yaml's

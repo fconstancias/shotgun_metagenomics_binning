@@ -1,5 +1,5 @@
 # -------------------------------------------------------------------
-# Test A: MEGAHIT co-assembly + MetaBAT2 (simple baseline)
+# Scenario A: MEGAHIT co-assembly + MetaBAT2 (simple baseline)
 # -------------------------------------------------------------------
 assemblies_tsv: "assemblies_toy_coasm.tsv"
 mappings_tsv:   "mappings_toy_coasm.tsv"

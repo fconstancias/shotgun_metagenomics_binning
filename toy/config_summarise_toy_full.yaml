@@ -1,5 +1,5 @@
 # -------------------------------------------------------------------
-# Test B: Pre-existing assemblies, Anvi'o reformat, all binners, Binette
+# Scenario B: Pre-existing assemblies, Anvi'o reformat, all binners, Binette
 # -------------------------------------------------------------------
 # Pairs with toy/config_binning_toy_full.yaml — run that first (binners run
 # there), then this config to refine with Binette + CheckM/GTDB-Tk/dRep.
