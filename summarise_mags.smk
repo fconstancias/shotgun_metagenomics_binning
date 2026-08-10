@@ -59,6 +59,48 @@ EXTRA_BINNER_DIRS = config.get("extra_binner_dirs", [])
 #       - "/abs/path/results_singlesample/semibin/participantX/output_bins"
 EXTRA_BINNER_DIRS_BY_GROUP = config.get("extra_binner_dirs_by_group", {})
 
+# Optional: auto-derive extra bin dirs for a co-assembly group from a
+# *different* pipeline run (e.g. a single-sample run of the same
+# participants), instead of listing them by hand. Group names don't need to
+# match between runs — samples are matched by fq1 file path (the one thing
+# guaranteed to identify "the same physical sample" regardless of naming
+# conventions on either side):
+#   cross_run_bin_comparisons:
+#     spa_co1:                                    # a group in *this* run
+#       output_dir:     "/abs/path/results_singlesample"
+#       assemblies_tsv: "/abs/path/results_singlesample/../assemblies_singlesample.tsv"
+# For each of spa_co1's constituent samples (from *this* run's
+# mappings_tsv), we look up that sample's fq1 in the other run's
+# assemblies_tsv; whichever assembly_group(s) it matches there are where
+# that sample was actually assembled in the other run.
+CROSS_RUN_COMPARISONS = config.get("cross_run_bin_comparisons", {})
+_cross_run_asm_df_cache = {}
+
+def _cross_run_dirs_for_group(group):
+    cfg = CROSS_RUN_COMPARISONS.get(group)
+    if not cfg:
+        return []
+    other_out = cfg["output_dir"]
+    other_asm_tsv = cfg["assemblies_tsv"]
+    if other_asm_tsv not in _cross_run_asm_df_cache:
+        df = pd.read_csv(other_asm_tsv, sep="\t").fillna("None")
+        df.columns = [c.strip() for c in df.columns]
+        _cross_run_asm_df_cache[other_asm_tsv] = df
+    other_asm_df = _cross_run_asm_df_cache[other_asm_tsv]
+
+    dirs = []
+    other_groups_matched = set()
+    for sample in ASM_TO_MAPPED_SAMPLES.get(group, []):
+        r1, _ = MAPPING_READS[sample]
+        other_groups_matched |= set(other_asm_df.loc[other_asm_df["fq1"] == r1, "assembly_group"])
+    for other_group in other_groups_matched:
+        dirs += [
+            f"{other_out}/metabat2/{other_group}",
+            f"{other_out}/semibin/{other_group}/output_bins",
+            f"{other_out}/vamb/{other_group}/bins",
+        ]
+    return dirs
+
 def get_binette_bin_dirs(wildcards):
     """Return list of binner output dirs for binette --bin_dirs, discovered
     directly on disk. Unlike metagenome_binning.smk (where Binette used to
@@ -72,7 +114,8 @@ def get_binette_bin_dirs(wildcards):
     ] + [
         tpl.format(output_dir=OUT, assembly_group=wildcards.assembly_group)
         for tpl in EXTRA_BINNER_DIRS
-    ] + EXTRA_BINNER_DIRS_BY_GROUP.get(wildcards.assembly_group, [])
+    ] + EXTRA_BINNER_DIRS_BY_GROUP.get(wildcards.assembly_group, []) \
+      + _cross_run_dirs_for_group(wildcards.assembly_group)
     return [d for d in candidates if _dir_has_bins(d)]
 
 checkpoint binette_refine:

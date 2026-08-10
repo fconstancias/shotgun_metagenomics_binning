@@ -476,6 +476,26 @@ co-assembly and single-sample runs for that participant in one refinement
 pass, picking/merging the best bins across both approaches — not just
 across binners within a single run.
 
+**Auto-deriving this** (`cross_run_bin_comparisons`): writing out every
+constituent sample's directories by hand doesn't scale to many
+participants. This does the same lookup automatically — you only tell it
+*which run* to compare against, not which single-sample groups to use:
+```yaml
+cross_run_bin_comparisons:
+  participantX_co:                                     # a group in *this* run
+    output_dir:     "/abs/path/results_singlesample"
+    assemblies_tsv: "/abs/path/results_singlesample/assemblies_singlesample.tsv"
+```
+For each of `participantX_co`'s constituent samples (from *this* run's own
+`mappings_tsv` — already known, since that's how the co-assembly was
+defined), it looks up that sample's `fq1` path in the other run's
+`assemblies_tsv` and uses whichever `assembly_group`(s) matched there.
+Matching by fastq path (not sample ID or naming convention) means the two
+runs' group/sample naming can differ freely — only the actual read files
+need to be the same. Can be combined with `extra_binner_dirs_by_group`
+(e.g. for one-off exceptions the auto-lookup doesn't cover); both
+contribute to the same candidate list.
+
 Note: Binette's own CheckM2-based quality report and the separate CheckM1 run
 above both estimate completeness/contamination — CheckM1 always runs
 regardless of `run_binette`, so genome quality is computed twice when Binette
