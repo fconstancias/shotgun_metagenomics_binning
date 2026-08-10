@@ -94,11 +94,40 @@ checkm2 database --download --path /path/to/checkm2_db
 
 # Anvi'o SCG taxonomy (only if anvi_taxonomy_and_stats: true)
 conda activate <your anvio env>
-anvi-setup-scg-taxonomy
+anvi-setup-scg-taxonomy -T 8
 ```
 
 Point `checkm_db_path`, `gtdbtk_db_path`, and `binette_checkm2_db` in your
 config at wherever you put these.
+
+#### Anvi'o SCG taxonomy in detail
+
+`anvi-setup-scg-taxonomy` downloads GTDB's single-copy-gene reference data
+and builds a diamond (`.dmnd`) search database for each of the 22 marker
+genes anvi'o uses (`Bacteria_71`/`Archaea_76`/ribosomal proteins/etc.) —
+this is what `anvi-run-hmms` + `anvi-run-scg-taxonomy` need at runtime.
+
+- **One-time per anvi'o conda env**, not per-project or per-output-dir —
+  run it once for whichever env `conda_dirs.anvio` points at, and every
+  future run using that same env is covered, no need to repeat it.
+- Needs outbound internet access from wherever it runs (login node or a
+  compute node with internet, not purely internal cluster storage).
+- By default installs into that anvi'o installation's own package data
+  directory. If you don't have write access there, or want a shared
+  location, pass `--scgs-taxonomy-data-dir /shared/path` — you must then
+  pass that **same** flag to every downstream anvi'o SCG command too
+  (not something this pipeline currently threads through, so in practice
+  stick with the default location unless you have a specific reason not to).
+- `--gtdb-release <N>` pins a specific GTDB release instead of the latest.
+- **Verify it worked**: count the diamond databases —
+  ```bash
+  find $(python3 -c "import anvio,os; print(os.path.dirname(anvio.__file__))")/data/misc/SCG_TAXONOMY/GTDB/SCG_SEARCH_DATABASES -iname "*.dmnd" | wc -l
+  # should print 22
+  ```
+  (or wherever `--scgs-taxonomy-data-dir` pointed, if you set it).
+- **If skipped**: `anvi-run-scg-taxonomy` fails immediately with `Config
+  Error: ... missing 22 of 22 databases required` — a clear, unambiguous
+  signal to come back and run this step.
 
 ---
 
