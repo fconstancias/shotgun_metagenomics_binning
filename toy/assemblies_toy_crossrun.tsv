@@ -1,0 +1,3 @@
+assembly_group	assembly_path	fq1	fq2	assembler
+single_144		/projects/hansen_ol-AUDIT/scratch/NILU/metagenomes/binning_smk/toy/reads/S_144_R1.fastq.gz	/projects/hansen_ol-AUDIT/scratch/NILU/metagenomes/binning_smk/toy/reads/S_144_R2.fastq.gz	megahit
+single_178		/projects/hansen_ol-AUDIT/scratch/NILU/metagenomes/binning_smk/toy/reads/S_178_R1.fastq.gz	/projects/hansen_ol-AUDIT/scratch/NILU/metagenomes/binning_smk/toy/reads/S_178_R2.fastq.gz	megahit

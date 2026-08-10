@@ -1,0 +1,32 @@
+# -------------------------------------------------------------------
+# Cross-run test: single-sample assembly + binning for 2 of spa_co1's
+# constituent samples, named differently (single_144/single_178) than
+# Scenario D — validates cross_run_bin_comparisons' fastq-path matching.
+# -------------------------------------------------------------------
+assemblies_tsv: "assemblies_toy_crossrun.tsv"
+mappings_tsv:   "mappings_toy_crossrun.tsv"
+output_dir:     "results_toy_crossrun"
+assembler:      "megahit"
+
+anvi_reformat: true
+
+# MetaBAT2 + VAMB only — SemiBin2/CONCOCT aren't needed to validate the
+# cross-run matching mechanism itself.
+binners: [metabat2, vamb]
+
+conda_dirs:
+  mapping:  /home/ljc444/.conda/snakemake_envs/953074478001cdc0d34692963ffdc07e_
+  binning:  /home/ljc444/.conda/snakemake_envs/7f98d8a39e48151911f533947efd5a37_
+  vamb:     /home/ljc444/.conda/snakemake_envs/7e256d09b67c0cdacf44b5594580506b_
+  anvio:    /home/ljc444/.conda/envs/anvio-9
+
+metabat2:
+  min_contig:   2000
+  max_edges:    500
+  min_cv:       1.0
+  min_cv_sum:   1.0
+  max_p:        95
+  min_s:        60
+  min_cls_size: 200000
+  save_cls:     true
+  verbose:      true

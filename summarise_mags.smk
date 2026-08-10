@@ -59,54 +59,23 @@ EXTRA_BINNER_DIRS = config.get("extra_binner_dirs", [])
 #       - "/abs/path/results_singlesample/semibin/participantX/output_bins"
 EXTRA_BINNER_DIRS_BY_GROUP = config.get("extra_binner_dirs_by_group", {})
 
-# Optional: auto-derive extra bin dirs for a co-assembly group from a
-# *different* pipeline run (e.g. a single-sample run of the same
-# participants), instead of listing them by hand. Group names don't need to
-# match between runs — samples are matched by fq1 file path (the one thing
-# guaranteed to identify "the same physical sample" regardless of naming
-# conventions on either side):
-#   cross_run_bin_comparisons:
-#     spa_co1:                                    # a group in *this* run
-#       output_dir:     "/abs/path/results_singlesample"
-#       assemblies_tsv: "/abs/path/results_singlesample/../assemblies_singlesample.tsv"
-# For each of spa_co1's constituent samples (from *this* run's
-# mappings_tsv), we look up that sample's fq1 in the other run's
-# assemblies_tsv; whichever assembly_group(s) it matches there are where
-# that sample was actually assembled in the other run.
-CROSS_RUN_COMPARISONS = config.get("cross_run_bin_comparisons", {})
-_cross_run_asm_df_cache = {}
-
-def _cross_run_dirs_for_group(group):
-    cfg = CROSS_RUN_COMPARISONS.get(group)
-    if not cfg:
-        return []
-    other_out = cfg["output_dir"]
-    other_asm_tsv = cfg["assemblies_tsv"]
-    if other_asm_tsv not in _cross_run_asm_df_cache:
-        df = pd.read_csv(other_asm_tsv, sep="\t").fillna("None")
-        df.columns = [c.strip() for c in df.columns]
-        _cross_run_asm_df_cache[other_asm_tsv] = df
-    other_asm_df = _cross_run_asm_df_cache[other_asm_tsv]
-
-    dirs = []
-    other_groups_matched = set()
-    for sample in ASM_TO_MAPPED_SAMPLES.get(group, []):
-        r1, _ = MAPPING_READS[sample]
-        other_groups_matched |= set(other_asm_df.loc[other_asm_df["fq1"] == r1, "assembly_group"])
-    for other_group in other_groups_matched:
-        dirs += [
-            f"{other_out}/metabat2/{other_group}",
-            f"{other_out}/semibin/{other_group}/output_bins",
-            f"{other_out}/vamb/{other_group}/bins",
-        ]
-    return dirs
-
 def get_binette_bin_dirs(wildcards):
     """Return list of binner output dirs for binette --bin_dirs, discovered
     directly on disk. Unlike metagenome_binning.smk (where Binette used to
     live), this workflow runs in a separate Snakemake invocation *after*
     binning has already finished, so there is no checkpoint to query here —
-    binning's output directories are just read as plain paths."""
+    binning's output directories are just read as plain paths.
+
+    IMPORTANT: every directory here (default three, extra_binner_dirs,
+    extra_binner_dirs_by_group) must contain bins whose contigs come from
+    THIS group's own assembly (the same file passed as -c below) — Binette
+    requires every input bin's contigs to exist in that one contigs FASTA,
+    and errors out otherwise. This only ever holds for another binner run
+    on the *same* assembly, never for bins from a genuinely different
+    assembly (e.g. a separate co-assembly vs single-sample run of the same
+    participants) — for that, see extra_bin_source_dirs below instead,
+    which pools already-complete genome bins downstream of Binette, where
+    whole-genome comparison (dRep's ANI) is the correct tool, not Binette."""
     candidates = [
         f"{OUT}/metabat2/{wildcards.assembly_group}",
         f"{OUT}/semibin/{wildcards.assembly_group}/output_bins",
@@ -114,8 +83,7 @@ def get_binette_bin_dirs(wildcards):
     ] + [
         tpl.format(output_dir=OUT, assembly_group=wildcards.assembly_group)
         for tpl in EXTRA_BINNER_DIRS
-    ] + EXTRA_BINNER_DIRS_BY_GROUP.get(wildcards.assembly_group, []) \
-      + _cross_run_dirs_for_group(wildcards.assembly_group)
+    ] + EXTRA_BINNER_DIRS_BY_GROUP.get(wildcards.assembly_group, [])
     return [d for d in candidates if _dir_has_bins(d)]
 
 checkpoint binette_refine:
@@ -202,10 +170,44 @@ rule aggregate_binette_bins:
 # CheckM / dRep / GTDB-Tk
 ############################################
 
-def bin_source_dir():
-    """Bins feeding CheckM/dRep/GTDB-Tk: Binette's refined bins when enabled,
-    else the raw per-binner bins produced by metagenome_binning.smk."""
+def _own_bin_source_dir():
+    """This run's own bins, before any cross-run pooling: Binette's refined
+    bins when enabled, else the raw per-binner bins from metagenome_binning.smk."""
     return BINETTE_RENAMED_DIR if RUN_BINETTE else f"{OUT}/renamed_bins"
+
+# Optional: compare bins across separate pipeline runs at the CheckM/dRep/
+# GTDB-Tk level (not Binette — see the note on get_binette_bin_dirs above
+# for why). Each entry is another run's bin_source_dir()-equivalent — its
+# own binette_renamed_bins/ (if it used Binette) or renamed_bins/ (if not)
+# — pooled in wholesale, no group/sample matching needed here: dRep's
+# whole-genome ANI dereplication naturally collapses redundant genomes
+# regardless of which run/assembly/participant they came from, and safely
+# ignores anything that isn't actually similar.
+#   extra_bin_source_dirs:
+#     - "/abs/path/results_singlesample/renamed_bins"
+#     - "/abs/path/results_singlesample/binette_renamed_bins"
+EXTRA_BIN_SOURCE_DIRS = config.get("extra_bin_source_dirs", [])
+
+def bin_source_dir():
+    """Bins feeding CheckM/dRep/GTDB-Tk. Pooled (via pool_extra_bins) when
+    extra_bin_source_dirs is set, otherwise this run's own bins directly."""
+    return f"{OUT}/pooled_bins" if EXTRA_BIN_SOURCE_DIRS else _own_bin_source_dir()
+
+if EXTRA_BIN_SOURCE_DIRS:
+    rule pool_extra_bins:
+        input:
+            f"{_own_bin_source_dir()}/.bins_aggregated.done"
+        output:
+            f"{OUT}/pooled_bins/.pooled.done"
+        run:
+            os.makedirs(f"{OUT}/pooled_bins", exist_ok=True)
+            for d in [_own_bin_source_dir()] + EXTRA_BIN_SOURCE_DIRS:
+                for f in glob.glob(os.path.join(d, "*.fa.gz")) + glob.glob(os.path.join(d, "*.fasta.gz")):
+                    dest = os.path.join(f"{OUT}/pooled_bins", os.path.basename(f))
+                    if not os.path.exists(dest):
+                        os.symlink(os.path.abspath(f), dest)
+            with open(output[0], "w"):
+                pass
 
 def get_all_renamed_bins_local(wildcards):
     """
@@ -218,6 +220,8 @@ def get_all_renamed_bins_local(wildcards):
         if bins:
             return bins
     # Fallback to trigger upstream logic if empty
+    if EXTRA_BIN_SOURCE_DIRS:
+        return [f"{OUT}/pooled_bins/.pooled.done"]
     if RUN_BINETTE:
         return [f"{BINETTE_RENAMED_DIR}/.bins_aggregated.done"]
     return [f"{OUT}/renamed_bins/.bins_aggregated.done"]

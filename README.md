@@ -443,58 +443,58 @@ CheckM/GTDB-Tk/dRep see all binners, not just MetaBAT2.
 - **With Binette**: bins need to land in a directory `get_binette_bin_dirs`
   recognizes for the matching `assembly_group` — the three above, or any
   directory listed in the optional `extra_binner_dirs` config key (path
-  templates using `{output_dir}`/`{assembly_group}` placeholders), e.g.:
+  templates using `{output_dir}`/`{assembly_group}` placeholders), or
+  `extra_binner_dirs_by_group` (a plain dict keyed by the group in *this*
+  run, mapping to already-resolved absolute paths — for when group naming
+  doesn't match a template, e.g. a different binner run with its own
+  naming convention), e.g.:
   ```yaml
   extra_binner_dirs:
     - "{output_dir}/binnerY/{assembly_group}/bins"
     - "/absolute/path/binnerZ_results/{assembly_group}"
+  extra_binner_dirs_by_group:
+    spa_co1:
+      - "/absolute/path/some_other_binner_run/spa_co1_output"
   ```
   Binette itself doesn't care about filenames, only extensions
   (`.fa`/`.fasta`/`.fna`, optionally gzipped) — bins named however you like
   (`binXXXX.fa`, `binYYY.fa`, ...) are all picked up.
 
+  **Hard constraint**: every bin passed to Binette must reference contigs
+  from *this group's own* assembly FASTA (the same file passed as `-c`) —
+  Binette errors out (`ValueError: N contigs from the input bins were not
+  found in the contigs file`) otherwise. This only ever holds for another
+  binner run on the *same* assembly as this group — never for bins from a
+  genuinely different assembly (see below).
+
 #### Comparing bins across separate pipeline runs (e.g. co-assembly vs single-sample per participant)
 
 If a participant was binned two different ways in two separate runs — say
-a co-assembly run (`assembly_group: participantX_co`) and a single-sample
-run (`assembly_group: participantX`) — the two group names won't match, so
-the templated `extra_binner_dirs` above can't pair them automatically (it
-substitutes the *current* group's own name into every template). Use
-`extra_binner_dirs_by_group` instead: a plain dict keyed by the group in
-*this* run, mapping to already-resolved absolute paths from the *other*
-run. Set `output_dir`/`assemblies_tsv` to one run (say the co-assembly
-one), then:
-```yaml
-extra_binner_dirs_by_group:
-  participantX_co:
-    - "/abs/path/results_singlesample/metabat2/participantX"
-    - "/abs/path/results_singlesample/vamb/participantX/bins"
-    - "/abs/path/results_singlesample/semibin/participantX/output_bins"
-```
-Binette then compares MetaBAT2/VAMB/SemiBin2 bins from *both* the
-co-assembly and single-sample runs for that participant in one refinement
-pass, picking/merging the best bins across both approaches — not just
-across binners within a single run.
+a co-assembly run and a single-sample run — those two runs produced
+**different assemblies** (different contigs, even from the same reads), so
+their bins can never be fed into one Binette call together (see the hard
+constraint above). The right place to compare them is one level
+downstream, at CheckM/dRep/GTDB-Tk: those tools work on standalone genome
+FASTA files with no shared-contig requirement, and dRep specifically
+compares genomes by whole-sequence ANI — exactly the right tool for "is
+this co-assembly bin the same organism as that single-sample bin."
 
-**Auto-deriving this** (`cross_run_bin_comparisons`): writing out every
-constituent sample's directories by hand doesn't scale to many
-participants. This does the same lookup automatically — you only tell it
-*which run* to compare against, not which single-sample groups to use:
+Use `extra_bin_source_dirs`: a flat list of other runs' bin-source
+directories (their own `binette_renamed_bins/` if they used Binette, or
+`renamed_bins/` if not) to pool in wholesale alongside this run's own bins,
+before CheckM/dRep/GTDB-Tk run:
 ```yaml
-cross_run_bin_comparisons:
-  participantX_co:                                     # a group in *this* run
-    output_dir:     "/abs/path/results_singlesample"
-    assemblies_tsv: "/abs/path/results_singlesample/assemblies_singlesample.tsv"
+extra_bin_source_dirs:
+  - "/abs/path/results_singlesample/renamed_bins"
+  - "/abs/path/results_singlesample/binette_renamed_bins"
 ```
-For each of `participantX_co`'s constituent samples (from *this* run's own
-`mappings_tsv` — already known, since that's how the co-assembly was
-defined), it looks up that sample's `fq1` path in the other run's
-`assemblies_tsv` and uses whichever `assembly_group`(s) matched there.
-Matching by fastq path (not sample ID or naming convention) means the two
-runs' group/sample naming can differ freely — only the actual read files
-need to be the same. Can be combined with `extra_binner_dirs_by_group`
-(e.g. for one-off exceptions the auto-lookup doesn't cover); both
-contribute to the same candidate list.
+No group/sample matching is needed here — dRep's ANI dereplication safely
+collapses genomes that really are the same organism across runs/approaches
+and ignores everything else, so you can pool in an *entire* other run
+(all its participants) without needing to cherry-pick which groups
+correspond to which. Bins are symlinked (not copied) into
+`{output_dir}/pooled_bins/`, which then becomes what CheckM/dRep/GTDB-Tk
+actually scan.
 
 Note: Binette's own CheckM2-based quality report and the separate CheckM1 run
 above both estimate completeness/contamination — CheckM1 always runs
@@ -612,7 +612,7 @@ Anvi'o is not installed via yaml — point `conda_dirs.anvio` in the config to a
 A toy dataset (3 SPAdes assemblies, 12 subsampled read sets) is available under `toy/`.
 All commands below are run from `toy/`, and assume the `SNAKEMAKE_FLAGS` export from [Setup](#conda-env-prefix-for-pipeline-tool-envs).
 
-Five test scenarios are provided, each with its own config pair and output directory.
+Six test scenarios are provided, each with its own config pair and output directory.
 
 ---
 
@@ -762,6 +762,42 @@ snakemake -s ../summarise_mags.smk --configfile config_summarise_toy_realasm.yam
 | After dRep dereplication | 24 | Near-identical genomes (e.g. the same organism recovered redundantly by different binners) are collapsed to one representative per ANI cluster |
 
 Each stage is a real reduction step, not just renaming — the counts above will differ run to run (especially with `semibin2_epochs` reduced for toy speed, which directly affects SemiBin2's bin quality/count).
+
+---
+
+### Scenario E — `extra_bin_source_dirs`: comparing bins across separate runs
+
+**Config files:** `config_assemble_toy_crossrun.yaml` + `config_binning_toy_crossrun.yaml`
+**Output:** `results_toy_crossrun/`
+
+A minimal, fast companion to Scenario D that validates `extra_bin_source_dirs`
+(see [Comparing bins across separate pipeline runs](#comparing-bins-across-separate-pipeline-runs-eg-co-assembly-vs-single-sample-per-participant)):
+`single_144`/`single_178` — deliberately named differently from Scenario D's
+`spa_co1` — are single-sample MEGAHIT assemblies of 2 of `spa_co1`'s 5
+constituent samples (the exact same fastq files), binned with MetaBAT2 +
+VAMB only (kept small on purpose; this scenario exists to exercise the
+cross-run pooling mechanism, not to be biologically meaningful on its own).
+
+```bash
+snakemake -s ../metagenome_assemble.smk --configfile config_assemble_toy_crossrun.yaml \
+  --profile ../cluster/ $SNAKEMAKE_FLAGS --rerun-incomplete --latency-wait 60
+
+snakemake -s ../metagenome_binning.smk --configfile config_binning_toy_crossrun.yaml \
+  --profile ../cluster/ $SNAKEMAKE_FLAGS --rerun-incomplete --latency-wait 60
+```
+
+Then point a `summarise_mags.smk` config for the Scenario D run at it:
+```yaml
+extra_bin_source_dirs:
+  - "results_toy_crossrun/renamed_bins"
+```
+Validated end-to-end: pooling correctly combined Scenario D's own 26
+Binette-refined bins with 35 raw bins from this separate run (19 from
+`single_144`, 16 from `single_178`), all scored together by CheckM with
+real, varied completeness/contamination values — confirming bins from a
+genuinely different assembly can be compared downstream of Binette (where
+whole-genome ANI applies) even though they can never be fed into Binette
+itself together (different contigs).
 
 ---
 

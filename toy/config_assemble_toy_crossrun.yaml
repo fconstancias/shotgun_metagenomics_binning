@@ -1,0 +1,16 @@
+# -------------------------------------------------------------------
+# Cross-run test: 2 of Scenario D's spa_co1 samples (S_144, S_178), each
+# single-sample-assembled here under deliberately different names
+# (single_144, single_178) than Scenario D uses, to prove
+# cross_run_bin_comparisons matches by fastq path, not naming convention.
+# -------------------------------------------------------------------
+assemblies_tsv: "assemblies_toy_crossrun.tsv"
+mappings_tsv:   "mappings_toy_crossrun.tsv"
+output_dir:     "results_toy_crossrun"
+assembler:      "megahit"
+
+anvi_reformat: true
+anvi_min_contig_len: 1000
+
+conda_dirs:
+  anvio: /home/ljc444/.conda/envs/anvio-9
