@@ -453,6 +453,29 @@ CheckM/GTDB-Tk/dRep see all binners, not just MetaBAT2.
   (`.fa`/`.fasta`/`.fna`, optionally gzipped) — bins named however you like
   (`binXXXX.fa`, `binYYY.fa`, ...) are all picked up.
 
+#### Comparing bins across separate pipeline runs (e.g. co-assembly vs single-sample per participant)
+
+If a participant was binned two different ways in two separate runs — say
+a co-assembly run (`assembly_group: participantX_co`) and a single-sample
+run (`assembly_group: participantX`) — the two group names won't match, so
+the templated `extra_binner_dirs` above can't pair them automatically (it
+substitutes the *current* group's own name into every template). Use
+`extra_binner_dirs_by_group` instead: a plain dict keyed by the group in
+*this* run, mapping to already-resolved absolute paths from the *other*
+run. Set `output_dir`/`assemblies_tsv` to one run (say the co-assembly
+one), then:
+```yaml
+extra_binner_dirs_by_group:
+  participantX_co:
+    - "/abs/path/results_singlesample/metabat2/participantX"
+    - "/abs/path/results_singlesample/vamb/participantX/bins"
+    - "/abs/path/results_singlesample/semibin/participantX/output_bins"
+```
+Binette then compares MetaBAT2/VAMB/SemiBin2 bins from *both* the
+co-assembly and single-sample runs for that participant in one refinement
+pass, picking/merging the best bins across both approaches — not just
+across binners within a single run.
+
 Note: Binette's own CheckM2-based quality report and the separate CheckM1 run
 above both estimate completeness/contamination — CheckM1 always runs
 regardless of `run_binette`, so genome quality is computed twice when Binette

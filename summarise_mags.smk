@@ -46,6 +46,19 @@ def _dir_has_bins(path):
 #     - "/absolute/path/binnerZ_results/{assembly_group}"
 EXTRA_BINNER_DIRS = config.get("extra_binner_dirs", [])
 
+# Optional: compare bins across separate pipeline runs whose assembly_group
+# names don't line up (e.g. a participant's co-assembly run named
+# "participantX_co" vs their single-sample run named "participantX") — the
+# templated extra_binner_dirs above can't pair those up since it applies the
+# same list, substituted with the *current* group's own name, to every group.
+# This is a plain per-group dict of already-resolved absolute paths instead:
+#   extra_binner_dirs_by_group:
+#     participantX_co:
+#       - "/abs/path/results_singlesample/metabat2/participantX"
+#       - "/abs/path/results_singlesample/vamb/participantX/bins"
+#       - "/abs/path/results_singlesample/semibin/participantX/output_bins"
+EXTRA_BINNER_DIRS_BY_GROUP = config.get("extra_binner_dirs_by_group", {})
+
 def get_binette_bin_dirs(wildcards):
     """Return list of binner output dirs for binette --bin_dirs, discovered
     directly on disk. Unlike metagenome_binning.smk (where Binette used to
@@ -59,7 +72,7 @@ def get_binette_bin_dirs(wildcards):
     ] + [
         tpl.format(output_dir=OUT, assembly_group=wildcards.assembly_group)
         for tpl in EXTRA_BINNER_DIRS
-    ]
+    ] + EXTRA_BINNER_DIRS_BY_GROUP.get(wildcards.assembly_group, [])
     return [d for d in candidates if _dir_has_bins(d)]
 
 checkpoint binette_refine:
