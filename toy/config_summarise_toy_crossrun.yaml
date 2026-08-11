@@ -1,0 +1,34 @@
+# -------------------------------------------------------------------
+# Scenario E's own summarise pass: runs Binette on single_144/single_178
+# (MetaBAT2 + VAMB), so results_toy_crossrun/binette_renamed_bins/ exists
+# and per_group_drep_comparisons can prefer it over the raw renamed_bins/
+# fallback -- validates "Binette winning bins on both sides" end-to-end.
+# -------------------------------------------------------------------
+assemblies_tsv: "assemblies_toy_crossrun.tsv"
+mappings_tsv:   "mappings_toy_crossrun.tsv"
+output_dir:     "results_toy_crossrun"
+assembler:      "megahit"
+anvi_reformat:  true
+
+run_binette:        true
+binette_checkm2_db: "/maps/projects/hansen_ol-AUDIT/scratch/checkm2/CheckM2_database/uniref100.KO.1.dmnd"
+
+conda_dirs:
+  binette: /home/ljc444/.conda/snakemake_envs/binette_env
+
+checkm_db_path: "/maps/projects/hansen_ol-AUDIT/scratch/checkm"
+checkm_outdir_name: "checkm1"
+checkm_extension: "gz"
+gtdbtk_db_path: "/maps/projects/hansen_ol-AUDIT/scratch/GTDB/release232"
+gtdbtk_extension: "gz"
+gtdbtk_min_af: 0.65
+gtdbtk_pplacer_cpus: 8
+gtdbtk_write_single_copy_genes: true
+gtdbtk_keep_intermediates: true
+
+drep_completeness: 66
+drep_contamination: 20
+drep_primary_ani: 0.95
+drep_secondary_ani: 0.98
+drep_min_overlap: 0.30
+drep_s_algorithm: "ANIn"

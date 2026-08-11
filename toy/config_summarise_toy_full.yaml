@@ -23,7 +23,7 @@ conda_dirs:
 # -------------------------------------------------------------------
 # Post-Binning Database Paths
 # -------------------------------------------------------------------
-checkm_db_path: "/maps/projects/hansen_ol-AUDIT/scratch/NILU/Ecoli/sweep/02_insilico_pcr_snk/checkm_db"
+checkm_db_path: "/maps/projects/hansen_ol-AUDIT/scratch/checkm"
 checkm_outdir_name: "checkm1"
 checkm_extension: "gz"
 gtdbtk_db_path: "/maps/projects/hansen_ol-AUDIT/scratch/GTDB/release232"

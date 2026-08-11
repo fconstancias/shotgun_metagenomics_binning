@@ -15,7 +15,11 @@ rule all:
         f"{CHECKM_DIR}/checkm.txt",
         f"{OUT}/gtdbtk_classify",
         f"{DREP_DIR}/dRep.genomeInfo",
-        f"{DREP_DIR}/dereplicated_genomes"
+        f"{DREP_DIR}/dereplicated_genomes",
+        *[f"{OUT}/per_group_drep/{g}/dRep/dereplicated_genomes"
+          for g in config.get("per_group_drep_comparisons", {})],
+        *[f"{OUT}/per_group_drep/{g}/gtdbtk_classify"
+          for g in config.get("per_group_drep_comparisons", {})]
 
 ############################################
 # Binette (multi-binner refinement, optional)
@@ -300,6 +304,192 @@ rule drep:
         """
         dRep dereplicate {params.drep_out} -g {params.bin_dir}/*.fa.gz --genomeInfo {input.genome_info} -p {threads} -comp {params.comp} -con {params.cont} -pa {params.pa} -sa {params.sa} -nc {params.nc} --S_algorithm {params.alg}
         """
+
+############################################
+# Per-participant dRep comparison (optional, alongside the global one above)
+############################################
+# The global checkm/drep/gtdbtk above pool every bin in this run (plus
+# extra_bin_source_dirs, if set) into ONE dereplication. This section
+# instead runs a SEPARATE, scoped CheckM+dRep+GTDB-Tk pass per configured
+# group — e.g. "compare just spa_co1's own bins against just the matching
+# single-sample run's bins for the same participant, with its own
+# taxonomy" — without mixing in every other participant. This multiplies
+# GTDB-Tk's (already the slowest step) runtime by however many groups are
+# configured here — the global gtdbtk rule below still runs once more on
+# top of that, on the full dereplicated dataset.
+#
+#   per_group_drep_comparisons:
+#     spa_co1:                                       # a group in *this* run
+#       output_dir:     "/abs/path/results_singlesample"
+#       assemblies_tsv: "/abs/path/results_singlesample/assemblies_singlesample.tsv"
+#
+# Matching works the same way as extra_bin_source_dirs' sibling concept:
+# spa_co1's constituent samples (from *this* run's mappings_tsv) are
+# looked up by fq1 path in the other run's assemblies_tsv; whichever
+# assembly_group(s) matched there are pooled in for this comparison —
+# group/sample naming can differ freely between the two runs.
+PER_GROUP_DREP_COMPARISONS = config.get("per_group_drep_comparisons", {})
+_per_group_other_asm_df_cache = {}
+
+def _other_run_groups_for(group):
+    cfg = PER_GROUP_DREP_COMPARISONS.get(group)
+    if not cfg:
+        return []
+    other_asm_tsv = cfg["assemblies_tsv"]
+    if other_asm_tsv not in _per_group_other_asm_df_cache:
+        df = pd.read_csv(other_asm_tsv, sep="\t").fillna("None")
+        df.columns = [c.strip() for c in df.columns]
+        _per_group_other_asm_df_cache[other_asm_tsv] = df
+    other_asm_df = _per_group_other_asm_df_cache[other_asm_tsv]
+    matched = set()
+    for sample in ASM_TO_MAPPED_SAMPLES.get(group, []):
+        r1, _ = MAPPING_READS[sample]
+        matched |= set(other_asm_df.loc[other_asm_df["fq1"] == r1, "assembly_group"])
+    return sorted(matched)
+
+if PER_GROUP_DREP_COMPARISONS:
+    _per_group_constraint = "|".join(re.escape(g) for g in PER_GROUP_DREP_COMPARISONS)
+
+    def _link_prefixed(src_dir, prefix, dest_dir):
+        if not os.path.isdir(src_dir):
+            return
+        for f in glob.glob(os.path.join(src_dir, f"{prefix}_*.fa.gz")) + glob.glob(os.path.join(src_dir, f"{prefix}_*.fasta.gz")):
+            dest = os.path.join(dest_dir, os.path.basename(f))
+            if not os.path.exists(dest):
+                os.symlink(os.path.abspath(f), dest)
+
+    def _per_group_pool_inputs(wildcards):
+        inputs = [f"{_own_bin_source_dir()}/.bins_aggregated.done"]
+        other_out = PER_GROUP_DREP_COMPARISONS[wildcards.compare_group]["output_dir"]
+        for cand in (f"{other_out}/binette_renamed_bins/.bins_aggregated.done", f"{other_out}/renamed_bins/.bins_aggregated.done"):
+            if os.path.exists(cand):
+                inputs.append(cand)
+                break
+        return inputs
+
+    rule pool_per_group_bins:
+        input:
+            _per_group_pool_inputs
+        output:
+            f"{OUT}/per_group_drep/{{compare_group}}/pooled_bins/.pooled.done"
+        wildcard_constraints:
+            compare_group = _per_group_constraint
+        run:
+            pool_dir = f"{OUT}/per_group_drep/{wildcards.compare_group}/pooled_bins"
+            os.makedirs(pool_dir, exist_ok=True)
+            _link_prefixed(_own_bin_source_dir(), wildcards.compare_group, pool_dir)
+            other_out = PER_GROUP_DREP_COMPARISONS[wildcards.compare_group]["output_dir"]
+            for other_group in _other_run_groups_for(wildcards.compare_group):
+                # Prefer Binette's refined bins for this group; only fall back to the
+                # raw per-binner bins if it has none (mirrors _own_bin_source_dir()).
+                for cand_dir in (f"{other_out}/binette_renamed_bins", f"{other_out}/renamed_bins"):
+                    matches = glob.glob(os.path.join(cand_dir, f"{other_group}_*.fa.gz")) + \
+                              glob.glob(os.path.join(cand_dir, f"{other_group}_*.fasta.gz"))
+                    if matches:
+                        _link_prefixed(cand_dir, other_group, pool_dir)
+                        break
+            with open(output[0], "w"):
+                pass
+
+    rule checkm_per_group:
+        input:
+            f"{OUT}/per_group_drep/{{compare_group}}/pooled_bins/.pooled.done"
+        output:
+            report = f"{OUT}/per_group_drep/{{compare_group}}/checkm1/checkm.txt",
+            out_dir = directory(f"{OUT}/per_group_drep/{{compare_group}}/checkm1")
+        wildcard_constraints:
+            compare_group = _per_group_constraint
+        conda:
+            "envs/checkm.yaml"
+        params:
+            db_path = config["checkm_db_path"],
+            bin_dir = lambda w: f"{OUT}/per_group_drep/{w.compare_group}/pooled_bins",
+            ext = config.get("checkm_extension", "gz")
+        threads: 16
+        shell:
+            """
+            export CHECKM_DATA_PATH={params.db_path}
+            mkdir -p {output.out_dir}
+            checkm lineage_wf -t {threads} --pplacer_threads {threads} -x {params.ext} --tab_table -f {output.report} {params.bin_dir} {output.out_dir}
+            """
+
+    rule generate_drep_info_per_group:
+        input:
+            checkm_report = f"{OUT}/per_group_drep/{{compare_group}}/checkm1/checkm.txt"
+        output:
+            genome_info = f"{OUT}/per_group_drep/{{compare_group}}/dRep/dRep.genomeInfo"
+        wildcard_constraints:
+            compare_group = _per_group_constraint
+        run:
+            df_cm = pd.read_csv(input.checkm_report, sep="\t")
+            df_cm.columns = [c.strip() for c in df_cm.columns]
+            bin_col = [c for c in df_cm.columns if "bin" in c.lower() or "id" in c.lower()][0]
+            comp_col = [c for c in df_cm.columns if "complete" in c.lower()][0]
+            cont_col = [c for c in df_cm.columns if "contam" in c.lower()][0]
+            out_rows = []
+            for _, row in df_cm.iterrows():
+                bin_id = str(row[bin_col])
+                if not bin_id.endswith(".fa.gz"):
+                    bin_id = f"{bin_id}.fa.gz"
+                out_rows.append({"genome": bin_id, "completeness": row[comp_col], "contamination": row[cont_col]})
+            pd.DataFrame(out_rows).to_csv(output.genome_info, index=False)
+
+    rule drep_per_group:
+        input:
+            pooled = f"{OUT}/per_group_drep/{{compare_group}}/pooled_bins/.pooled.done",
+            genome_info = f"{OUT}/per_group_drep/{{compare_group}}/dRep/dRep.genomeInfo"
+        output:
+            out_dir = directory(f"{OUT}/per_group_drep/{{compare_group}}/dRep/dereplicated_genomes")
+        wildcard_constraints:
+            compare_group = _per_group_constraint
+        conda:
+            "envs/drep.yaml"
+        params:
+            bin_dir = lambda w: f"{OUT}/per_group_drep/{w.compare_group}/pooled_bins",
+            drep_out = lambda w: f"{OUT}/per_group_drep/{w.compare_group}/dRep",
+            comp    = config.get("drep_completeness", 66),
+            cont    = config.get("drep_contamination", 20),
+            pa      = config.get("drep_primary_ani", 0.95),
+            sa      = config.get("drep_secondary_ani", 0.98),
+            nc      = config.get("drep_min_overlap", 0.30),
+            alg     = config.get("drep_s_algorithm", "ANIn")
+        threads: 8
+        shell:
+            """
+            dRep dereplicate {params.drep_out} -g {params.bin_dir}/*.fa.gz --genomeInfo {input.genome_info} -p {threads} -comp {params.comp} -con {params.cont} -pa {params.pa} -sa {params.sa} -nc {params.nc} --S_algorithm {params.alg}
+            """
+
+    rule gtdbtk_per_group:
+        input:
+            f"{OUT}/per_group_drep/{{compare_group}}/pooled_bins/.pooled.done"
+        output:
+            out_dir = directory(f"{OUT}/per_group_drep/{{compare_group}}/gtdbtk_classify")
+        wildcard_constraints:
+            compare_group = _per_group_constraint
+        conda:
+            "envs/gtdbtk.yaml"
+        params:
+            db_path = config["gtdbtk_db_path"],
+            bin_dir = lambda w: f"{OUT}/per_group_drep/{w.compare_group}/pooled_bins",
+            ext = config.get("gtdbtk_extension", "gz"),
+            min_af = config.get("gtdbtk_min_af", 0.5),
+            pplacer_cpus = int(config.get("gtdbtk_pplacer_cpus", 8)),
+            write_scg_flag = "--write_single_copy_genes" if config.get("gtdbtk_write_single_copy_genes", True) else "",
+            keep_intermediates_flag = "--keep_intermediates" if config.get("gtdbtk_keep_intermediates", True) else ""
+        threads: 16
+        shell:
+            """
+            export GTDBTK_DATA_PATH={params.db_path}
+            mkdir -p {output.out_dir}
+            gtdbtk classify_wf \
+              --genome_dir {params.bin_dir} \
+              -x {params.ext} \
+              --out_dir {output.out_dir} \
+                        {params.write_scg_flag} \
+                        {params.keep_intermediates_flag} \
+              --min_af {params.min_af} \
+                        --cpus {threads} --pplacer_cpus {params.pplacer_cpus}
+            """
 
 rule gtdbtk:
     input:

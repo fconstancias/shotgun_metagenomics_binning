@@ -32,6 +32,9 @@ set-threads:
   checkm: 30
   drep: 30
   gtdbtk: 30
+  checkm_per_group: 30
+  drep_per_group: 30
+  gtdbtk_per_group: 30
 
 set-resources:
   reformat_contigs:
@@ -74,5 +77,17 @@ set-resources:
     mem_mb: 200000
     runtime: 4320
   drep:
+    mem_mb: 100000
+    runtime: 2880
+  pool_per_group_bins:
+    mem_mb: 2000
+    runtime: 60
+  checkm_per_group:
+    mem_mb: 100000
+    runtime: 2880
+  gtdbtk_per_group:
+    mem_mb: 200000
+    runtime: 4320
+  drep_per_group:
     mem_mb: 100000
     runtime: 2880

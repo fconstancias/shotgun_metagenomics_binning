@@ -502,6 +502,53 @@ regardless of `run_binette`, so genome quality is computed twice when Binette
 is enabled. This mirrors the pipeline's existing behavior (previously across
 two separate workflow invocations) and is left as-is.
 
+##### Scoped per-participant comparison: `per_group_drep_comparisons`
+
+`extra_bin_source_dirs` pools bins **globally** — every bin from the other
+run joins every bin from this one before a single dataset-wide dRep call.
+That's the right tool when you want one dereplicated set across the whole
+dataset, but it's the wrong tool when what you actually want is: "for this
+one participant, compare their co-assembly bins against their single-sample
+bins, without mixing in anyone else's bins." For that, use
+`per_group_drep_comparisons` instead — a per-group dict that runs its own
+scoped CheckM + dRep + GTDB-Tk, alongside (not instead of) the global ones:
+
+```yaml
+per_group_drep_comparisons:
+  spa_co1:                                    # this run's assembly_group to scope the comparison to
+    output_dir:     "results_singlesample"    # the other run's output_dir
+    assemblies_tsv: "assemblies_singlesample.tsv"   # the other run's assemblies_tsv
+```
+
+The other run's matching groups are auto-detected the same way as
+`extra_binner_dirs_by_group` — by reading the other run's `assemblies_tsv`
+and matching `fq1` paths against this group's constituent samples (via
+`mappings_tsv`), so `spa_co1` (a co-assembly of several samples) correctly
+pulls in every single-sample group from the other run built from any of
+those same fastqs, regardless of how the two runs name their groups.
+
+For each configured group, this produces its own subtree:
+```
+{output_dir}/per_group_drep/{group}/
+├── pooled_bins/            # symlinks: this group's own bins + matched groups' bins from the other run
+├── checkm1/checkm.txt
+├── dRep/dereplicated_genomes/
+└── gtdbtk_classify/
+```
+Pooling prefers each side's Binette-refined bins (`binette_renamed_bins/`)
+and only falls back to raw per-binner bins (`renamed_bins/`) for a group that
+has no Binette output — mirroring how this run's own bin source is chosen.
+Because that preference is resolved by scanning the other run's directory at
+pooling time (not by a Snakemake-tracked dependency across the two separate
+workflow invocations), if the other run gets a fresh Binette pass *after*
+`pooled_bins/` was already built here, delete
+`{output_dir}/per_group_drep/{group}/pooled_bins/` and re-run to pick it up.
+
+This is fully additive: omit `per_group_drep_comparisons` (the default) and
+nothing changes — only the global CheckM/dRep/GTDB-Tk run. Both mechanisms
+can be used together, and both can be combined with `extra_bin_source_dirs`
+in the same run.
+
 Key config options:
 ```yaml
 output_dir:          "results"
@@ -798,6 +845,28 @@ real, varied completeness/contamination values — confirming bins from a
 genuinely different assembly can be compared downstream of Binette (where
 whole-genome ANI applies) even though they can never be fed into Binette
 itself together (different contigs).
+
+**`per_group_drep_comparisons` validation:** after also running Binette on
+Scenario E itself (`config_summarise_toy_crossrun.yaml`, `run_binette: true`),
+a `per_group_drep_comparisons` entry scoping `spa_co1` to this run's
+`single_144`/`single_178` was validated end-to-end:
+```yaml
+per_group_drep_comparisons:
+  spa_co1:
+    output_dir:     "results_toy_crossrun"
+    assemblies_tsv: "assemblies_toy_crossrun.tsv"
+```
+`fq1` auto-detection correctly matched only `single_144` + `single_178` (not
+Scenario D's other participants). Pooling correctly preferred each side's
+Binette-refined bins over raw ones: 15 (`spa_co1`) + 6 (`single_144`) + 8
+(`single_178`) = 29 bins, no duplication. dRep dereplicated 29 → 24 genomes,
+correctly collapsing species recovered by both assembly strategies for the
+same participant (e.g. *Faecalibacterium longum*, *Roseburia rectalis*) while
+keeping species unique to the co-assembly (*Prevotella copri*, *Akkermansia*,
+*Bifidobacterium infantis*) — exactly the "which assembly strategy recovered
+this species" comparison the feature is for. GTDB-Tk classified all 29 pooled
+bins to species level. The global (non-scoped) CheckM/dRep/GTDB-Tk for
+Scenario D ran unaffected alongside it in the same invocation.
 
 ---
 
