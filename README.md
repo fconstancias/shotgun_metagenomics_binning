@@ -23,6 +23,14 @@ A modular Snakemake pipeline for metagenomic assembly, read mapping, binning, an
   downstream consumers (CONCOCT vs SCG-taxonomy/stats) would be clearer.
   Real rename, touches every existing config file — do deliberately, not
   as a drive-by.
+- `spades_assemble` (metagenome_assemble.smk) only keeps `scaffolds.fasta`
+  (renamed to `final.contigs.fa`) and deletes the rest of SPAdes's output
+  dir (`rm -rf {tmpdir}` after the `mv`) — including the assembly graph
+  (`assembly_graph_with_scaffolds.gfa`/`assembly_graph.fastg`) and the
+  unscaffolded `contigs.fasta`. Consider keeping the graph file too (e.g.
+  `final.assembly_graph.gfa` alongside `final.contigs.fa`) for graph-aware
+  downstream uses (Bandage visualization, repeat/strain resolution,
+  graph-based binning) instead of discarding it unconditionally.
 
 ## Overview
 
