@@ -8,6 +8,21 @@ A modular Snakemake pipeline for metagenomic assembly, read mapping, binning, an
 - Branch with CoverM for mapping with option to use galah instead of Drep in summarise_mags
 - later: use Simka / SimkaMin to select samples for mapping
 - later: ONT data ?
+- Rename `run_concoct` (config key, both `config_assemble`/`config_binning`,
+  read once from `common.smk`) to something like `run_anviodb_concoct`, and
+  the `{output_dir}/concoct/{group}/` directory (metagenome_assemble.smk) to
+  something like `anvio_concoct/`. Both are named after CONCOCT specifically,
+  but the thing they actually gate/hold is the shared Anvi'o contigs DB
+  (`anvi_gen_contigs_db`/`anvi_run_hmms`), built whenever either
+  `run_concoct` OR `anvi_taxonomy_and_stats` is true — so an assembly-only
+  run with `anvi_taxonomy_and_stats: true`, `run_concoct: false` (e.g.
+  single-sample groups, which can never be CONCOCT-capable) still produces a
+  `concoct/{group}/` folder per group that CONCOCT itself will never touch,
+  confusing to read at a glance. Naming both after what they actually are
+  (the shared Anvi'o DB prerequisite) rather than one of the two possible
+  downstream consumers (CONCOCT vs SCG-taxonomy/stats) would be clearer.
+  Real rename, touches every existing config file — do deliberately, not
+  as a drive-by.
 
 ## Overview
 
