@@ -31,6 +31,15 @@ A modular Snakemake pipeline for metagenomic assembly, read mapping, binning, an
   `final.assembly_graph.gfa` alongside `final.contigs.fa`) for graph-aware
   downstream uses (Bandage visualization, repeat/strain resolution,
   graph-based binning) instead of discarding it unconditionally.
+- Split `metagenome_binning.smk` into separate mapping and binning
+  workflows. Right now one file does both (bowtie2/strobealign mapping
+  through to MetaBAT2/VAMB/SemiBin2/CONCOCT), so re-tuning binner
+  parameters means the mapping DAG is re-evaluated too (even though it's
+  a no-op via Snakemake's up-to-date check, it's still one combined
+  workflow to reason about). Same rationale as moving Binette out to
+  summarise_mags.smk earlier — decoupling stages that have genuinely
+  different iteration cadences (map once, re-bin many times while tuning)
+  makes each stage easier to re-run/tune independently.
 
 ## Overview
 
