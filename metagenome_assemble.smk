@@ -165,7 +165,8 @@ rule spades_assemble:
     threads: 16
     resources:
         mem_mb = 64000,
-        runtime = 1440
+        runtime = 1440,
+        assembly_slots = 1
     params:
         mem_gb = lambda wildcards, resources: max(4, int(resources.mem_mb / 1024) - 3),
         spades_input = lambda wildcards, input: " ".join(
@@ -197,7 +198,8 @@ rule megahit_assemble:
     threads: 16
     resources:
         mem_mb = 64000,
-        runtime = 720
+        runtime = 720,
+        assembly_slots = 1
     params:
         r1_comma = lambda wildcards, input: ",".join(input.r1),
         r2_comma = lambda wildcards, input: ",".join(input.r2),

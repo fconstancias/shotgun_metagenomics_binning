@@ -889,6 +889,17 @@ snakemake -s ../metagenome_binning.smk --configfile config_binning_toy_concoct.y
 
 Once all jobs complete successfully, scale to `--jobs 20-50` for the real dataset.
 
+**Capping concurrent assemblies specifically:** `--jobs`/`jobs:` caps the
+total number of SLURM jobs in flight across *every* rule combined — it
+doesn't let you cap just the heavy, long-running ones (`spades_assemble`,
+`megahit_assemble`, each 16 threads/64GB/up to 24h) separately from cheap,
+fast rules (`reformat_contigs`, `use_prebuilt_assembly`, etc.). Both
+assembly rules declare `resources: assembly_slots = 1`; `cluster/config.yaml`
+sets a default pool of 10 (`resources: ["assembly_slots=10"]`), so no more
+than 10 SPAdes/MEGAHIT assemblies run concurrently regardless of the overall
+`--jobs` value — useful when assembling many single-sample groups at once on
+a shared cluster. Override per-invocation with `--resources assembly_slots=N`.
+
 ---
 
 ## Troubleshooting

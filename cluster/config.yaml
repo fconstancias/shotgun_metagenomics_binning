@@ -3,6 +3,14 @@ slurm-logdir: logs/slurm
 
 jobs: 50
 
+# Caps concurrent spades_assemble/megahit_assemble jobs specifically,
+# independent of the overall `jobs:` cap above (which covers every rule
+# combined). Each of those rules declares resources: assembly_slots = 1;
+# this sets the shared pool size. Override per-invocation with
+# `--resources assembly_slots=N`.
+resources:
+  - "assembly_slots=10"
+
 latency-wait: 60
 printshellcmds: true
 keep-going: true
