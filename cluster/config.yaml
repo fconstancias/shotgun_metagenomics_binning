@@ -68,7 +68,7 @@ set-resources:
     runtime: 480
   semibin2_bin:
     mem_mb: 32000
-    runtime: 720
+    runtime: 1440
   vamb_bin:
     mem_mb: 64000
     runtime: 720
