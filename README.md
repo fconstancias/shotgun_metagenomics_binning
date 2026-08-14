@@ -529,10 +529,13 @@ correspond to which. Bins are symlinked (not copied) into
 actually scan.
 
 Note: Binette's own CheckM2-based quality report and the separate CheckM1 run
-above both estimate completeness/contamination — CheckM1 always runs
-regardless of `run_binette`, so genome quality is computed twice when Binette
-is enabled. This mirrors the pipeline's existing behavior (previously across
-two separate workflow invocations) and is left as-is.
+above both estimate completeness/contamination — by default CheckM1 always
+runs regardless of `run_binette`, so genome quality is computed twice when
+Binette is enabled. Set `use_binette_checkm2_for_drep: true` to skip the
+redundant CheckM1 pass and build dRep's `genomeInfo` directly from Binette's
+own `final_bins_quality_reports.tsv` (per group) instead — only takes effect
+when `run_binette: true` (nothing to reuse otherwise), off by default so
+existing configs keep today's behavior unchanged.
 
 ##### Scoped per-participant comparison: `per_group_drep_comparisons`
 

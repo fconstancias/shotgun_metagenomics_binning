@@ -7,12 +7,21 @@ DREP_DIR = f"{OUT}/{DREP_DIRNAME}"
 BINETTE_DIR = f"{OUT}/binette"
 BINETTE_RENAMED_DIR = f"{OUT}/binette_renamed_bins"
 
+# Binette already computes CheckM2 completeness/contamination for every
+# winning bin (final_bins_quality_reports.tsv, per group) -- when true,
+# dRep's genomeInfo is built directly from those instead of running CheckM1
+# a second time on the same bins. Only takes effect when run_binette is
+# also true (nothing to reuse otherwise); ignored/false by default so
+# existing configs keep today's CheckM1-always-runs behavior unchanged.
+USE_BINETTE_CHECKM2 = config.get("use_binette_checkm2_for_drep", False)
+SKIP_CHECKM1 = RUN_BINETTE and USE_BINETTE_CHECKM2
+
 # rule all must be the first rule in the file (Snakemake's implicit default
 # target), so it comes before the helper functions/rules it transitively
 # depends on.
 rule all:
     input:
-        f"{CHECKM_DIR}/checkm.txt",
+        *([] if SKIP_CHECKM1 else [f"{CHECKM_DIR}/checkm.txt"]),
         f"{OUT}/gtdbtk_classify",
         f"{DREP_DIR}/dRep.genomeInfo",
         f"{DREP_DIR}/dereplicated_genomes",
@@ -250,37 +259,61 @@ rule checkm:
         checkm lineage_wf -t {threads} --pplacer_threads {threads} -x {params.ext} --tab_table -f {output.report} {params.bin_dir} {output.out_dir}
         """
 
-rule generate_drep_info:
-    input:
-        checkm_report = f"{CHECKM_DIR}/checkm.txt"
-    output:
-        genome_info = f"{DREP_DIR}/dRep.genomeInfo"
-    run:
-        import pandas as pd
-        df_cm = pd.read_csv(input.checkm_report, sep="\t")
-        df_cm.columns = [c.strip() for c in df_cm.columns]
-        bin_col = [c for c in df_cm.columns if "bin" in c.lower() or "id" in c.lower()][0]
-        comp_col = [c for c in df_cm.columns if "complete" in c.lower()][0]
-        cont_col = [c for c in df_cm.columns if "contam" in c.lower()][0]
-        
-        out_rows = []
-        for _, row in df_cm.iterrows():
-            bin_id = str(row[bin_col])
-            # CheckM strips the whole compound extension (e.g. a bin
-            # scanned with -x gz named "foo.fa.gz" is reported as just
-            # "foo", not "foo.fa") -- every bin in bin_source_dir() is
-            # normalized to ".fa.gz" (see metagenome_binning.smk's in-place
-            # per-binner renaming and rename_binette_bin), so re-append
-            # exactly that to match the real filename on disk.
-            if not bin_id.endswith(".fa.gz"):
-                bin_id = f"{bin_id}.fa.gz"
-            out_rows.append({
-                "genome": bin_id,
-                "completeness": row[comp_col],
-                "contamination": row[cont_col]
-            })
-        df_out = pd.DataFrame(out_rows)
-        df_out.to_csv(output.genome_info, index=False)
+if SKIP_CHECKM1:
+    rule generate_drep_info:
+        """Binette already scored every winning bin with CheckM2
+        (final_bins_quality_reports.tsv, per group) -- reuse that directly
+        instead of running CheckM1 a second time on the same bin set."""
+        input:
+            f"{BINETTE_RENAMED_DIR}/.bins_aggregated.done"
+        output:
+            genome_info = f"{DREP_DIR}/dRep.genomeInfo"
+        run:
+            import pandas as pd
+            out_rows = []
+            for group in binnable_groups:
+                report = f"{BINETTE_DIR}/{group}/final_bins_quality_reports.tsv"
+                df_bt = pd.read_csv(report, sep="\t")
+                df_bt.columns = [c.strip() for c in df_bt.columns]
+                for _, row in df_bt.iterrows():
+                    out_rows.append({
+                        "genome": f"{group}_{row['name']}.fa.gz",
+                        "completeness": row["completeness"],
+                        "contamination": row["contamination"]
+                    })
+            pd.DataFrame(out_rows).to_csv(output.genome_info, index=False)
+else:
+    rule generate_drep_info:
+        input:
+            checkm_report = f"{CHECKM_DIR}/checkm.txt"
+        output:
+            genome_info = f"{DREP_DIR}/dRep.genomeInfo"
+        run:
+            import pandas as pd
+            df_cm = pd.read_csv(input.checkm_report, sep="\t")
+            df_cm.columns = [c.strip() for c in df_cm.columns]
+            bin_col = [c for c in df_cm.columns if "bin" in c.lower() or "id" in c.lower()][0]
+            comp_col = [c for c in df_cm.columns if "complete" in c.lower()][0]
+            cont_col = [c for c in df_cm.columns if "contam" in c.lower()][0]
+
+            out_rows = []
+            for _, row in df_cm.iterrows():
+                bin_id = str(row[bin_col])
+                # CheckM strips the whole compound extension (e.g. a bin
+                # scanned with -x gz named "foo.fa.gz" is reported as just
+                # "foo", not "foo.fa") -- every bin in bin_source_dir() is
+                # normalized to ".fa.gz" (see metagenome_binning.smk's in-place
+                # per-binner renaming and rename_binette_bin), so re-append
+                # exactly that to match the real filename on disk.
+                if not bin_id.endswith(".fa.gz"):
+                    bin_id = f"{bin_id}.fa.gz"
+                out_rows.append({
+                    "genome": bin_id,
+                    "completeness": row[comp_col],
+                    "contamination": row[cont_col]
+                })
+            df_out = pd.DataFrame(out_rows)
+            df_out.to_csv(output.genome_info, index=False)
 
 rule drep:
     input:

@@ -18,6 +18,13 @@ binette_checkm2_db: "/data/databases/checkm2/CheckM2_database/uniref100.KO.1.dmn
 conda_dirs:
   binette: null   # e.g. /home/ljc444/.conda/envs/binette_env
 
+# When run_binette: true, Binette already scores every winning bin with
+# CheckM2 (final_bins_quality_reports.tsv, per group). Set this to true to
+# build dRep's genomeInfo directly from those reports instead of running
+# CheckM1 a second time on the same bin set -- skips the checkm rule
+# entirely. No effect if run_binette is false (nothing to reuse).
+use_binette_checkm2_for_drep: false
+
 # -------------------------------------------------------------------
 # Post-Binning Database Paths
 # -------------------------------------------------------------------
