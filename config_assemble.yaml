@@ -26,6 +26,16 @@ run_concoct: false
 # have been run once for the anvio conda env). Off by default.
 anvi_taxonomy_and_stats: false
 
+# List assembly_group names here to skip SPAdes' BayesHammer error-
+# correction for just those groups (spades.py --only-assembler). Only
+# needed as a workaround for a known, unfixed upstream SPAdes bug where
+# BayesHammer's CQF dependency segfaults non-deterministically on some
+# samples during k-mer counting (input-dependent, not a resource issue --
+# see https://github.com/ablab/spades/issues/318). Leave empty unless a
+# group actually hits that crash; error-correction is worth keeping
+# everywhere else.
+spades_only_assembler_groups: []
+
 # Anvi'o isn't installed via yaml — must match config_binning.yaml's
 # conda_dirs.anvio (an existing installation).
 conda_dirs:

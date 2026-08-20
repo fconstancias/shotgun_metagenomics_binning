@@ -173,11 +173,27 @@ rule spades_assemble:
             f"--pe{idx}-1 {r1} --pe{idx}-2 {r2}"
             for idx, (r1, r2) in enumerate(zip(input.r1, input.r2), start=1)
         ),
-        tmpdir = f"{OUT}/assembly/spades/{{assembly_group}}/tmp_spades"
+        tmpdir = f"{OUT}/assembly/spades/{{assembly_group}}/tmp_spades",
+        # SPAdes' BayesHammer error-correction step has a known, unfixed
+        # upstream bug in its CQF dependency that segfaults non-
+        # deterministically on some samples during k-mer counting (see
+        # https://github.com/ablab/spades/issues/318 -- confirmed
+        # input-dependent, not a resource/memory issue, and the SPAdes
+        # maintainers have no plans to fix it). --only-assembler skips
+        # BayesHammer entirely, which sidesteps the bug at the cost of no
+        # read error-correction for that sample. Opt-in per group (not a
+        # blanket flag -- error-correction is worth keeping for every
+        # sample that doesn't hit this).
+        only_assembler_flag = lambda wildcards: (
+            "--only-assembler"
+            if wildcards.assembly_group in config.get("spades_only_assembler_groups", [])
+            else ""
+        )
     shell:
         """
         rm -rf {params.tmpdir}
         spades.py --meta {params.spades_input} -t {threads} -m {params.mem_gb} \
+            {params.only_assembler_flag} \
             -o {params.tmpdir} > {log.err} 2>&1
         mv {params.tmpdir}/scaffolds.fasta {output.contigs}
         rm -rf {params.tmpdir}
