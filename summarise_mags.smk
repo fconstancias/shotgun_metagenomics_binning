@@ -352,11 +352,20 @@ rule drep:
             for f in {params.bin_dir}/*.fa.gz; do
                 gunzip -c "$f" > "$GENOME_DIR/$(basename "$f" .gz)"
             done
+            # genomeInfo's "genome" column still says "*.fa.gz" -- dRep
+            # matches it against the -g basenames verbatim, so a mismatch
+            # here makes it think quality info is missing for every genome
+            # and fall back to running CheckM itself (which isn't even on
+            # PATH in this env, so it hard-errors). Strip .gz to match the
+            # decompressed .fa names actually passed to -g.
+            GENOME_INFO=$GENOME_DIR/dRep.genomeInfo.fa_names.csv
+            sed 's/\.fa\.gz,/.fa,/' {input.genome_info} > $GENOME_INFO
         else
             GENOME_DIR={params.bin_dir}
             GENOME_EXT=".fa.gz"
+            GENOME_INFO={input.genome_info}
         fi
-        dRep dereplicate {params.drep_out} -g $GENOME_DIR/*${{GENOME_EXT:-.fa}} --genomeInfo {input.genome_info} -p {threads} -comp {params.comp} -con {params.cont} -pa {params.pa} -sa {params.sa} -nc {params.nc} --S_algorithm {params.alg}
+        dRep dereplicate {params.drep_out} -g $GENOME_DIR/*${{GENOME_EXT:-.fa}} --genomeInfo $GENOME_INFO -p {threads} -comp {params.comp} -con {params.cont} -pa {params.pa} -sa {params.sa} -nc {params.nc} --S_algorithm {params.alg}
         """
 
 ############################################
@@ -520,11 +529,16 @@ if PER_GROUP_DREP_COMPARISONS:
                 for f in {params.bin_dir}/*.fa.gz; do
                     gunzip -c "$f" > "$GENOME_DIR/$(basename "$f" .gz)"
                 done
+                # Also see rule drep: genomeInfo's "genome" column must match
+                # the decompressed .fa basenames, not the original .fa.gz.
+                GENOME_INFO=$GENOME_DIR/dRep.genomeInfo.fa_names.csv
+                sed 's/\.fa\.gz,/.fa,/' {input.genome_info} > $GENOME_INFO
             else
                 GENOME_DIR={params.bin_dir}
                 GENOME_EXT=".fa.gz"
+                GENOME_INFO={input.genome_info}
             fi
-            dRep dereplicate {params.drep_out} -g $GENOME_DIR/*${{GENOME_EXT:-.fa}} --genomeInfo {input.genome_info} -p {threads} -comp {params.comp} -con {params.cont} -pa {params.pa} -sa {params.sa} -nc {params.nc} --S_algorithm {params.alg}
+            dRep dereplicate {params.drep_out} -g $GENOME_DIR/*${{GENOME_EXT:-.fa}} --genomeInfo $GENOME_INFO -p {threads} -comp {params.comp} -con {params.cont} -pa {params.pa} -sa {params.sa} -nc {params.nc} --S_algorithm {params.alg}
             """
 
     rule gtdbtk_per_group:
