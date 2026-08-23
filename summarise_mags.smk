@@ -333,9 +333,30 @@ rule drep:
         nc      = config.get("drep_min_overlap", 0.30),
         alg     = config.get("drep_s_algorithm", "ANIn")
     threads: 8
+    resources:
+        tmpdir = "/scratch/tmp"
     shell:
         """
-        dRep dereplicate {params.drep_out} -g {params.bin_dir}/*.fa.gz --genomeInfo {input.genome_info} -p {threads} -comp {params.comp} -con {params.cont} -pa {params.pa} -sa {params.sa} -nc {params.nc} --S_algorithm {params.alg}
+        # dRep's ANIn/ANImf secondary algorithms call nucmer directly, which
+        # cannot read gzip-compressed FASTA -- it silently produces empty
+        # alignments (ani=0.0 for every pair, including a genome against
+        # itself) rather than erroring, so every genome ends up as its own
+        # singleton cluster and dereplication looks like it ran but never
+        # actually removes any redundancy. Mash-based algorithms (fastANI,
+        # and primary clustering itself) read .fa.gz natively and are
+        # unaffected -- only decompress when the chosen secondary algorithm
+        # actually needs it.
+        if [ "{params.alg}" = "ANIn" ] || [ "{params.alg}" = "ANImf" ]; then
+            GENOME_DIR=$(mktemp -d {resources.tmpdir}/drep_decompressed.XXXXXX)
+            trap "rm -rf $GENOME_DIR" EXIT
+            for f in {params.bin_dir}/*.fa.gz; do
+                gunzip -c "$f" > "$GENOME_DIR/$(basename "$f" .gz)"
+            done
+        else
+            GENOME_DIR={params.bin_dir}
+            GENOME_EXT=".fa.gz"
+        fi
+        dRep dereplicate {params.drep_out} -g $GENOME_DIR/*${{GENOME_EXT:-.fa}} --genomeInfo {input.genome_info} -p {threads} -comp {params.comp} -con {params.cont} -pa {params.pa} -sa {params.sa} -nc {params.nc} --S_algorithm {params.alg}
         """
 
 ############################################
@@ -487,9 +508,23 @@ if PER_GROUP_DREP_COMPARISONS:
             nc      = config.get("drep_min_overlap", 0.30),
             alg     = config.get("drep_s_algorithm", "ANIn")
         threads: 8
+        resources:
+            tmpdir = "/scratch/tmp"
         shell:
             """
-            dRep dereplicate {params.drep_out} -g {params.bin_dir}/*.fa.gz --genomeInfo {input.genome_info} -p {threads} -comp {params.comp} -con {params.cont} -pa {params.pa} -sa {params.sa} -nc {params.nc} --S_algorithm {params.alg}
+            # See rule drep's identical guard above: ANIn/ANImf call nucmer
+            # directly, which silently fails on gzip-compressed FASTA.
+            if [ "{params.alg}" = "ANIn" ] || [ "{params.alg}" = "ANImf" ]; then
+                GENOME_DIR=$(mktemp -d {resources.tmpdir}/drep_decompressed.XXXXXX)
+                trap "rm -rf $GENOME_DIR" EXIT
+                for f in {params.bin_dir}/*.fa.gz; do
+                    gunzip -c "$f" > "$GENOME_DIR/$(basename "$f" .gz)"
+                done
+            else
+                GENOME_DIR={params.bin_dir}
+                GENOME_EXT=".fa.gz"
+            fi
+            dRep dereplicate {params.drep_out} -g $GENOME_DIR/*${{GENOME_EXT:-.fa}} --genomeInfo {input.genome_info} -p {threads} -comp {params.comp} -con {params.cont} -pa {params.pa} -sa {params.sa} -nc {params.nc} --S_algorithm {params.alg}
             """
 
     rule gtdbtk_per_group:
