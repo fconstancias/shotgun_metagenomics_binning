@@ -527,7 +527,13 @@ rule anvi_run_hmms:
         runtime = 240
     shell:
         """
-        anvi-run-hmms -c {input.db} -T {threads}
+        # --just-do-it: contigs-db may already have HMM hits from the
+        # optional anvi_taxonomy_and_stats step in metagenome_assemble.smk
+        # (SCG taxonomy runs its own anvi-run-hmms pass) -- without this,
+        # anvi-run-hmms refuses with "Some of the HMM sources you wish to
+        # run on this database are already in..." (confirmed: every group
+        # in a project with anvi_taxonomy_and_stats: true hits this).
+        anvi-run-hmms -c {input.db} -T {threads} --just-do-it
         touch {output}
         """
 
