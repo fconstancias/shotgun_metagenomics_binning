@@ -23,6 +23,33 @@ semibin2_capable_groups = [
     if all(MAPPING_TOOL_FOR[(g, s)] == "bowtie2" for s in ASM_TO_MAPPED_SAMPLES[g])
 ]
 
+# Anvi'o contigs-db + profile-db, independent of CONCOCT clustering (see
+# build_anvio_profile_db below) -- unlike concoct_capable_groups (>=2
+# bowtie2 samples, since CONCOCT needs a *merged* profile), this only needs
+# >=1: groups with exactly one bowtie2 sample (the common case for a
+# single-sample-assembly project, where that one sample is the assembly's
+# own self-sample) skip anvi-merge entirely and use that one profile
+# directly, since anvi-merge itself refuses to merge a single profile.
+anvio_profile_capable_groups = [
+    g for g in binnable_groups
+    if any(MAPPING_TOOL_FOR[(g, s)] == "bowtie2" for s in ASM_TO_MAPPED_SAMPLES[g])
+]
+
+def get_profile_db_target(group):
+    """Final anvi'o profile-db target for one group: the merged profile
+    (a file -- rule anvi_merge's own declared output) if it has >=2
+    bowtie2-mapped samples, else the single sample's own profile directory
+    directly (anvi-merge requires at least 2 inputs). Must target rule
+    anvi_profile's actual declared output (the directory() itself, not a
+    file path inside it) -- targeting "PROFILE_{sample}/PROFILE.db"
+    confuses Snakemake's wildcard matching (the {sample_id} wildcard
+    greedily swallows the /PROFILE.db suffix, since Snakemake doesn't know
+    the directory's real contents, only that it's a directory() output)."""
+    bt2_samples = [s for s in ASM_TO_MAPPED_SAMPLES[group] if MAPPING_TOOL_FOR[(group, s)] == "bowtie2"]
+    if len(bt2_samples) >= 2:
+        return f"{OUT}/concoct/{group}/MERGED/PROFILE.db"
+    return f"{OUT}/concoct/{group}/PROFILE_{bt2_samples[0]}"
+
 ############################################
 # Helpers
 ############################################
@@ -85,6 +112,17 @@ def _all_targets(wildcards):
         for g in concoct_capable_groups:
             for nc in CONCOCT_CLUSTERS:
                 targets.append(f"{OUT}/concoct/{g}/.concoct_{nc}.done")
+    # Anvi'o contigs-db + profile-db as their own target, independent of
+    # CONCOCT clustering above -- e.g. for downstream anvi'o tools (gene
+    # coverage/detection export, DESMAN's SNV extraction, anvi-interactive)
+    # that only need a profile-db, not a full CONCOCT collection. Contigs-db
+    # itself is built in metagenome_assemble.smk (shared with the optional
+    # SCG-taxonomy/stats step there) -- already exists for every group
+    # whenever anvi_taxonomy_and_stats: true was set for the assemble run,
+    # independent of this flag.
+    if config.get("build_anvio_profile_db", False):
+        targets += [f"{OUT}/concoct/{g}/.hmms.done" for g in anvio_profile_capable_groups]
+        targets += [get_profile_db_target(g) for g in anvio_profile_capable_groups]
     return targets
 
 rule all:
