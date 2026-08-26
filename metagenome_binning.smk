@@ -527,13 +527,30 @@ rule anvi_run_hmms:
         runtime = 240
     shell:
         """
-        # --just-do-it: contigs-db may already have HMM hits from the
-        # optional anvi_taxonomy_and_stats step in metagenome_assemble.smk
-        # (SCG taxonomy runs its own anvi-run-hmms pass) -- without this,
-        # anvi-run-hmms refuses with "Some of the HMM sources you wish to
-        # run on this database are already in..." (confirmed: every group
-        # in a project with anvi_taxonomy_and_stats: true hits this).
-        anvi-run-hmms -c {input.db} -T {threads} --just-do-it
+        # contigs-db may already have some/all default HMM sources from the
+        # optional anvi_taxonomy_and_stats step in metagenome_assemble.smk,
+        # which runs the same default anvi-run-hmms set. Only request the
+        # sources that are actually missing: --just-do-it would delete and
+        # redo everything requested, including sources already present
+        # (confirmed by reading anvio's TablesForHMMHits.check_sources --
+        # just_do_it removes then re-searches the full intersection), which
+        # would waste ~6min/group across every already-annotated group for
+        # no new result. Requesting only the gap also sidesteps the "some
+        # HMM sources are already in the database" ConfigError entirely, so
+        # --just-do-it is never needed.
+        MISSING=$(python3 -c "
+import subprocess
+from anvio.terminal import SuppressAllOutput
+with SuppressAllOutput():
+    import anvio.data.hmm as hmm_data
+out = subprocess.run(['sqlite3', '{input.db}', 'select source from hmm_hits_info;'], capture_output=True, text=True).stdout
+present = set(l.strip() for l in out.splitlines() if l.strip())
+missing = sorted(set(hmm_data.sources.keys()) - present)
+print(','.join(missing))
+")
+        if [ -n "$MISSING" ]; then
+            anvi-run-hmms -c {input.db} -T {threads} -I "$MISSING"
+        fi
         touch {output}
         """
 
