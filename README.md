@@ -810,6 +810,58 @@ snakemake -s ../metagenome_binning.smk --configfile config_binning_toy_concoct.y
 
 The `--jobs 2` cluster test submits only 2 SLURM jobs concurrently, which is safe for validating the workflow before scaling to production (where you'd use `--jobs 20-50` depending on cluster load).
 
+#### `build_anvio_profile_db` — anvi'o profile-db without CONCOCT
+
+`run_concoct: true` above builds a full CONCOCT clustering track, which
+requires `anvi-merge`'d profile-dbs and therefore >=2 bowtie2-mapped
+samples per group. If you just want a profile-db (for `anvi-summarize`
+gene coverage/detection export, GFF3/protein-FASTA export via
+`anvi-get-sequences-for-gene-calls`, DESMAN's `anvi-gen-variability-profile`
+SNV step, `anvi-interactive`, etc.) without committing to CONCOCT
+clustering, set `build_anvio_profile_db: true` instead (independent of
+`run_concoct` — both can be on at once with no conflict, since a group
+already CONCOCT-clustered already has its profile-db and this is a
+no-op for it):
+
+```yaml
+build_anvio_profile_db: true
+```
+
+For every binnable group with at least one bowtie2-mapped sample, this
+targets `concoct/{group}/.hmms.done` (HMM annotation on the contigs-db)
+and a final profile-db:
+- **>=2 bowtie2 samples**: `concoct/{group}/MERGED/PROFILE.db` (via the
+  same `anvi_merge` rule CONCOCT uses).
+- **Exactly 1 bowtie2 sample** (the common case for single-sample-assembly
+  projects, where that one sample is the group's own self-sample):
+  `concoct/{group}/PROFILE_{sample}/` directly — `anvi-merge` itself
+  refuses to merge a single profile, so there's nothing to merge.
+
+Contigs-db itself (`concoct/{group}/{group}.db`) is built in
+`metagenome_assemble.smk`, shared with the optional SCG-taxonomy/contig-stats
+step there (`anvi_taxonomy_and_stats: true`) — if that was already set for
+the assemble run, the contigs-db already exists for every group regardless
+of this flag.
+
+**Exporting a GFF3 + protein FASTA from the resulting contigs-db** (e.g.
+as pre-computed input to a downstream annotation pipeline like EBI's
+mobilome-annotation-pipeline, whose samplesheet accepts optional
+`proteins_gff`/`proteins_faa` columns to skip its own gene-calling and
+keep gene IDs consistent with this pipeline's own database):
+
+```bash
+anvi-get-sequences-for-gene-calls -c concoct/{group}/{group}.db --export-gff3 -o {group}.gff3
+anvi-get-sequences-for-gene-calls -c concoct/{group}/{group}.db --get-aa-sequences -o {group}.faa
+```
+
+Two separate calls -- `--export-gff3` and `--get-aa-sequences` are
+mutually exclusive in one invocation (confirmed: anvi'o errors with "AA
+sequences can only be reported in FASTA format, please remove the
+--export-gff3 flag"). The GFF3's attributes column is bare (just a gene
+ID, e.g. `ID=spaS222___0`) -- no function/product annotation baked in
+even if HMM/COG/KOfam annotation was run on the contigs-db, so this only
+carries gene *structure* (coordinates + sequence), not descriptions.
+
 ---
 
 ### Scenario D — Full pipeline from raw reads, mixed assemblers, auto-named co-assembly
