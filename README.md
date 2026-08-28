@@ -851,7 +851,8 @@ keep gene IDs consistent with this pipeline's own database):
 
 ```bash
 anvi-get-sequences-for-gene-calls -c concoct/{group}/{group}.db --export-gff3 -o {group}.gff3
-anvi-get-sequences-for-gene-calls -c concoct/{group}/{group}.db --get-aa-sequences -o {group}.faa
+anvi-get-sequences-for-gene-calls -c concoct/{group}/{group}.db --get-aa-sequences -o {group}.faa \
+    --defline-format "{contigs_db_project_name}___{gene_caller_id}"
 ```
 
 Two separate calls -- `--export-gff3` and `--get-aa-sequences` are
@@ -861,6 +862,18 @@ sequences can only be reported in FASTA format, please remove the
 ID, e.g. `ID=spaS222___0`) -- no function/product annotation baked in
 even if HMM/COG/KOfam annotation was run on the contigs-db, so this only
 carries gene *structure* (coordinates + sequence), not descriptions.
+
+**`--defline-format` on the second call is required, not optional** -- without it, anvi'o
+defaults the FASTA defline to bare `{gene_caller_id}` (e.g. `>0`), while `--export-gff3`
+always writes `ID={contigs_db_project_name}___{gene_caller_id}` (e.g. `ID=spaS222___0`) --
+same gene, two different ID strings, with no way to reconcile them downstream except by
+matching row order. A downstream pipeline that joins by ID string (not row position) will
+silently get wrong/empty results, not an error -- hit this for real feeding an early export
+into EBI's mobilome-annotation-pipeline and nf-core/funcscan, both of which validate file
+existence/format on their schemas but never checked ID correspondence. `--export-gff3`
+itself rejects `--defline-format` outright ("not compatible with the GFF3 output mode") --
+so the fix only goes on the `--get-aa-sequences` call, matching what `--export-gff3` already
+writes.
 
 ---
 
