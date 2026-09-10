@@ -875,6 +875,77 @@ itself rejects `--defline-format` outright ("not compatible with the GFF3 output
 so the fix only goes on the `--get-aa-sequences` call, matching what `--export-gff3` already
 writes.
 
+#### `run_plasmaag` — plasmid + MAG binning (`dev_plasmaag` branch)
+
+[PlasMAAG](https://github.com/RasmussenLab/PlasMAAG) ([Nature Biotechnology
+2026](https://www.nature.com/articles/s41587-026-03005-7)) recovers plasmids
+*and* cellular genomes together from assembly-alignment graphs + contrastive
+learning. It's a standalone, VAMB-based Snakemake pipeline in its own right
+(bundles VAMB's VAE as a component) — not designed for DAS_Tool/Binette-style
+ensembling with MetaBAT2/CONCOCT/SemiBin2, so this integration invokes its own
+CLI wrapper as a black box rather than reimplementing its internals as rules
+here. It does its **own** internal read mapping (strobealign — the same
+mapper this pipeline already uses elsewhere — but a separate pass from our
+own BAMs; its CLI has no option to reuse a pre-computed BAM instead).
+
+**Two config flags, one per stage:**
+
+```yaml
+# metagenome_assemble.smk config -- SPAdes groups only, no effect on MEGAHIT
+keep_plasmaag_files: true
+```
+```yaml
+# metagenome_binning.smk config
+run_plasmaag: true
+```
+
+`keep_plasmaag_files` retains SPAdes' own `contigs.fasta` (pre-scaffolding —
+**not** the same file as this pipeline's renamed `final.contigs.fa`),
+`assembly_graph_after_simplification.gfa`, and `contigs.paths` — all three
+mutually consistent, all three normally deleted with the rest of the SPAdes
+tmpdir. Default off (same "don't keep what's not needed" policy as
+everywhere else — this is real extra disk per group). MEGAHIT groups need no
+extra retention; PlasMAAG's `--reads_and_contigs` mode works from
+`final.contigs.fa` directly.
+
+**Two sharp edges, both confirmed the hard way against real `spa_single_all` data:**
+
+1. **Cannot retroactively recover files for already-built assemblies.**
+   `keep_plasmaag_files` only captures files while `spades_assemble` is
+   actually running. Any group whose assembly came from a prebuilt path
+   (`assembly_path` set in `assemblies_tsv`, common for assemblies ingested
+   from before this pipeline existed) never runs that rule at all — checked
+   `spa_single_all`'s own prebuilt directories directly: only the final
+   scaffolds file and a report remain, the original SPAdes working
+   directory (and its graph/paths files) is long gone. For an existing
+   project like this one, using PlasMAAG on already-built groups means a
+   genuine full re-assembly from raw reads, not a cheap incremental add.
+2. **Turning this on retroactively re-triggers assembly for *every* already-built
+   group**, even ones that don't care about PlasMAAG. `plasmaag_input` is a
+   new declared output of `spades_assemble` — Snakemake reruns a rule if
+   *any* of its declared outputs are missing, and this one never existed
+   before, so every previously-built group gets re-assembled from scratch
+   the first time this flag is flipped on. Confirmed directly via dry-run
+   (`spades_assemble` scheduled to rerun for a group whose `final.contigs.fa`
+   already existed, solely because `plasmaag_input` didn't).
+
+**Mapping strategy**: PlasMAAG's samplesheet takes one row per sample that
+contributed reads to an assembly group (`ASM_READS_R1`/`ASM_READS_R2`), each
+pointing at that group's shared assembly. Multiple rows — a co-assembly
+group with several contributing samples — is how PlasMAAG gets its main
+cross-sample alignment-graph advantage; a single-assembly group typically
+has just one row, which still runs correctly but forgoes that advantage
+(the same single- vs. multi-sample tradeoff VAMB itself has always had).
+
+Install PlasMAAG once, separately (`git clone` + its own `conda env create`,
+see its README — not installable from a plain conda dependency list, so
+`envs/plasmaag.yaml` here is a placeholder/pointer, not a real spec), then
+point this pipeline at it:
+```yaml
+conda_dirs:
+  plasmaag: /path/to/conda/envs/plasmaag
+```
+
 ---
 
 ### Scenario D — Full pipeline from raw reads, mixed assemblers, auto-named co-assembly

@@ -1,0 +1,23 @@
+# PlasMAAG cannot be installed from a plain conda dependency list -- it's a
+# git-cloned repo with its own pip install and a bundled Snakemake
+# sub-pipeline (which manages its OWN per-rule conda envs internally,
+# including a ~15 min geNomad database download on first use). This file is
+# NOT sufficient for Snakemake's --use-conda to build a working environment
+# from; it exists only so `conda_env("plasmaag", "envs/plasmaag.yaml")`
+# has a real path to fall back to if conda_dirs.plasmaag isn't configured
+# (that fallback will fail loudly, which is intentional -- see below).
+#
+# Real install (once, following https://github.com/RasmussenLab/PlasMAAG):
+#   git clone https://github.com/RasmussenLab/PlasMAAG
+#   conda env create -n plasmaag --file=PlasMAAG/envs/PlasMAAG.yaml
+#   conda activate plasmaag
+#   # first real run downloads the geNomad database automatically
+#
+# Then point this pipeline at that pre-built env instead of this file:
+#   conda_dirs:
+#     plasmaag: /path/to/conda/envs/plasmaag
+name: plasmaag-placeholder-do-not-use
+channels:
+  - conda-forge
+dependencies:
+  - python=3.10

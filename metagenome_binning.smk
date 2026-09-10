@@ -50,6 +50,20 @@ def get_profile_db_target(group):
         return f"{OUT}/concoct/{group}/MERGED/PROFILE.db"
     return f"{OUT}/concoct/{group}/PROFILE_{bt2_samples[0]}"
 
+# PlasMAAG: recovers plasmids AND MAGs together (its own multi-stage Snakemake
+# pipeline, invoked here via its CLI wrapper -- not reimplemented as our own
+# rules). Works against SPAdes (needs the plasmaag_input/ 3-file bundle from
+# metagenome_assemble.smk's keep_plasmaag_files flag) or MEGAHIT (needs only
+# final.contigs.fa, no extra retention). Capable for any assembler; caller is
+# responsible for keep_plasmaag_files: true when any spades group will use it
+# -- there's no cheap way to check bundle contents at DAG-build time, so a
+# spades group run without that flag will just fail loudly inside PlasMAAG
+# itself (empty/missing input files), not silently produce wrong output.
+plasmaag_capable_groups = [
+    g for g in binnable_groups
+    if ASSEMBLER_FOR[g] in ("spades", "megahit")
+]
+
 ############################################
 # Helpers
 ############################################
@@ -112,6 +126,8 @@ def _all_targets(wildcards):
         for g in concoct_capable_groups:
             for nc in CONCOCT_CLUSTERS:
                 targets.append(f"{OUT}/concoct/{g}/.concoct_{nc}.done")
+    if RUN_PLASMAAG:
+        targets += [f"{OUT}/plasmaag/{g}/results" for g in plasmaag_capable_groups]
     # Anvi'o contigs-db + profile-db as their own target, independent of
     # CONCOCT clustering above -- e.g. for downstream anvi'o tools (gene
     # coverage/detection export, DESMAN's SNV extraction, anvi-interactive)
@@ -410,6 +426,63 @@ rule semibin2_bin:
             [ -e "$f" ] || continue
             mv "$f" "{wildcards.assembly_group}_$f"
         done
+        """
+
+############################################
+# PlasMAAG (plasmid + MAG binning, own Snakemake pipeline via CLI wrapper)
+############################################
+
+def get_plasmaag_assembly_path(wildcards):
+    """The shared assembly PlasMAAG's samplesheet third column points at:
+    SPAdes needs the retained 3-file bundle (contigs.fasta + assembly graph +
+    contigs.paths, all internally consistent -- NOT our renamed/scaffolded
+    final.contigs.fa); MEGAHIT needs only final.contigs.fa directly."""
+    g = wildcards.assembly_group
+    if ASSEMBLER_FOR[g] == "spades":
+        return f"{OUT}/assembly/spades/{g}/plasmaag_input"
+    return f"{OUT}/assembly/{ASSEMBLER_FOR[g]}/{g}/final.contigs.fa"
+
+rule plasmaag_bin:
+    """One samplesheet row per sample that built this assembly group, all
+    pointing at the same shared assembly -- multiple rows (a co-assembly
+    group, several contributing samples) is how PlasMAAG gets its main
+    cross-sample alignment-graph advantage; a single-assembly group typically
+    has just one row, which still runs but loses that specific advantage
+    (same tradeoff VAMB itself has run single- vs multi-sample). PlasMAAG
+    does its own internal read mapping (strobealign, same mapper this
+    pipeline already uses elsewhere) from the raw reads given here -- its
+    CLI has no option to reuse a pre-computed BAM instead, so this is a
+    separate mapping pass, not shared compute with the other binners."""
+    input:
+        assembly_path = get_plasmaag_assembly_path,
+        r1 = lambda w: ASM_READS_R1[w.assembly_group],
+        r2 = lambda w: ASM_READS_R2[w.assembly_group]
+    output:
+        results = directory(f"{OUT}/plasmaag/{{assembly_group}}/results")
+    log:
+        err = f"{OUT}/logs/plasmaag/{{assembly_group}}.log"
+    conda:
+        conda_env("plasmaag", "envs/plasmaag.yaml")
+    wildcard_constraints:
+        assembly_group = "|".join(re.escape(g) for g in plasmaag_capable_groups) or "none_placeholder"
+    threads: 16
+    resources:
+        mem_mb = 64000,
+        runtime = 2880
+    params:
+        outdir = f"{OUT}/plasmaag/{{assembly_group}}",
+        samplesheet = f"{OUT}/plasmaag/{{assembly_group}}/samplesheet.tsv",
+        third_column = lambda w: "assembly_dir" if ASSEMBLER_FOR[w.assembly_group] == "spades" else "contigs",
+        cli_flag = lambda w: "--reads_and_assembly_dir" if ASSEMBLER_FOR[w.assembly_group] == "spades" else "--reads_and_contigs"
+    shell:
+        """
+        mkdir -p {params.outdir}
+        python3 {workflow.basedir}/scripts/write_plasmaag_samplesheet.py \
+            --r1 {input.r1} --r2 {input.r2} \
+            --assembly-path {input.assembly_path} \
+            --third-column {params.third_column} \
+            --out {params.samplesheet}
+        PlasMAAG {params.cli_flag} {params.samplesheet} --output {params.outdir} --threads {threads} > {log.err} 2>&1
         """
 
 ############################################

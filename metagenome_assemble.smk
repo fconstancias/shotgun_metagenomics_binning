@@ -155,7 +155,18 @@ rule spades_assemble:
         r1 = lambda w: ASM_READS_R1[w.assembly_group],
         r2 = lambda w: ASM_READS_R2[w.assembly_group]
     output:
-        contigs = f"{OUT}/assembly/spades/{{assembly_group}}/final.contigs.fa"
+        contigs = f"{OUT}/assembly/spades/{{assembly_group}}/final.contigs.fa",
+        # PlasMAAG needs SPAdes' own contigs.fasta (pre-scaffolding, node IDs
+        # match contigs.paths -- our renamed/scaffolded final.contigs.fa does
+        # NOT) plus assembly_graph_after_simplification.gfa and contigs.paths,
+        # all three internally consistent with each other. These normally get
+        # deleted with the rest of the SPAdes tmpdir; keep_plasmaag_files
+        # (default off -- adds real disk, same "don't keep what's not needed"
+        # policy as everywhere else) copies them out before that cleanup.
+        # Always declared so the rule's output set doesn't depend on config
+        # (Snakemake needs a fixed signature); content is a real 3-file
+        # bundle when enabled, an empty marker dir otherwise.
+        plasmaag_input = directory(f"{OUT}/assembly/spades/{{assembly_group}}/plasmaag_input")
     log:
         err = f"{OUT}/logs/assembly/spades/{{assembly_group}}.log"
     conda:
@@ -188,7 +199,8 @@ rule spades_assemble:
             "--only-assembler"
             if wildcards.assembly_group in config.get("spades_only_assembler_groups", [])
             else ""
-        )
+        ),
+        keep_plasmaag_files = config.get("keep_plasmaag_files", False)
     shell:
         """
         rm -rf {params.tmpdir}
@@ -196,6 +208,12 @@ rule spades_assemble:
             {params.only_assembler_flag} \
             -o {params.tmpdir} > {log.err} 2>&1
         mv {params.tmpdir}/scaffolds.fasta {output.contigs}
+        mkdir -p {output.plasmaag_input}
+        if [ "{params.keep_plasmaag_files}" = "True" ]; then
+            cp {params.tmpdir}/contigs.fasta {output.plasmaag_input}/contigs.fasta
+            cp {params.tmpdir}/assembly_graph_after_simplification.gfa {output.plasmaag_input}/assembly_graph_after_simplification.gfa
+            cp {params.tmpdir}/contigs.paths {output.plasmaag_input}/contigs.paths
+        fi
         rm -rf {params.tmpdir}
         """
 
