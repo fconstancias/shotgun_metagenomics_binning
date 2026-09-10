@@ -4,6 +4,11 @@ one row per sample that contributed reads to an assembly group, all pointing
 at that group's shared assembly (its own plasmaag_input/ 3-file bundle for
 SPAdes, or final.contigs.fa directly for MEGAHIT -- PlasMAAG's own README
 distinguishes these two input modes by the third column's name).
+
+Standalone helper -- PlasMAAG runs as its own separate Snakemake pipeline
+(not wired into metagenome_binning.smk; see README.md's run_plasmaag section
+for why), so this is meant to be called directly or from a launcher script
+before invoking `PlasMAAG --reads_and_assembly_dir/--reads_and_contigs`.
 """
 import argparse
 

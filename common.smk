@@ -16,7 +16,6 @@ BINNERS       = config.get("binners", ["metabat2"])   # list: metabat2, semibin2
 RUN_BINETTE   = config.get("run_binette", False)       # merge binner results with Binette
 ANVI_REFORMAT = config.get("anvi_reformat", False)     # filter+rename contigs via anvi-script-reformat-fasta
 RUN_CONCOCT   = config.get("run_concoct", False)        # CONCOCT binning via Anvi'o (metagenome_binning.smk)
-RUN_PLASMAAG  = config.get("run_plasmaag", False)       # PlasMAAG plasmid+MAG binning, invoked as its own Snakemake pipeline (metagenome_binning.smk)
 ANVI_TAXONOMY_AND_STATS = config.get("anvi_taxonomy_and_stats", False)  # anvi-run-scg-taxonomy + anvi-display-contigs-stats (metagenome_assemble.smk)
 
 # Optional pre-installed conda env paths. When set, Snakemake uses the existing

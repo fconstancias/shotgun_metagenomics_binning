@@ -875,35 +875,37 @@ itself rejects `--defline-format` outright ("not compatible with the GFF3 output
 so the fix only goes on the `--get-aa-sequences` call, matching what `--export-gff3` already
 writes.
 
-#### `run_plasmaag` — plasmid + MAG binning (`dev_plasmaag` branch)
+#### PlasMAAG — plasmid + MAG binning, run as its own pipeline (`dev_plasmaag` branch)
 
 [PlasMAAG](https://github.com/RasmussenLab/PlasMAAG) ([Nature Biotechnology
 2026](https://www.nature.com/articles/s41587-026-03005-7)) recovers plasmids
 *and* cellular genomes together from assembly-alignment graphs + contrastive
-learning. It's a standalone, VAMB-based Snakemake pipeline in its own right
-(bundles VAMB's VAE as a component) — not designed for DAS_Tool/Binette-style
-ensembling with MetaBAT2/CONCOCT/SemiBin2, so this integration invokes its own
-CLI wrapper as a black box rather than reimplementing its internals as rules
-here. It does its **own** internal read mapping (strobealign — the same
-mapper this pipeline already uses elsewhere — but a separate pass from our
-own BAMs; its CLI has no option to reuse a pre-computed BAM instead).
+learning. It's a full multi-stage Snakemake pipeline in its own right (BLAST
+all-vs-all across samples, node2vec, a VAMB-based VAE, geNomad classification)
+and bundles VAMB itself as a component — not designed for DAS_Tool/Binette-
+style ensembling with MetaBAT2/CONCOCT/SemiBin2 anyway. Given that, it's
+**not** wired into `metagenome_binning.smk` as a rule: wrapping a whole
+independent Snakemake pipeline inside one rule of this one would flatten its
+own internal parallelism into a single opaque job, and it doesn't need to
+share a DAG with the other binners since it never ensembles with them. Same
+pattern as MAP/funcscan/anvi'o-KEGG elsewhere in this project — standalone
+pipelines that consume this pipeline's outputs, not rules inside it.
 
-**Two config flags, one per stage:**
+It does its **own** internal read mapping (strobealign — the same mapper
+this pipeline already uses elsewhere — but a separate pass from our own
+BAMs; its CLI has no option to reuse a pre-computed BAM instead).
 
+**This pipeline's only role**: retain the 3 files SPAdes normally discards
+that PlasMAAG needs. One assemble-stage config flag:
 ```yaml
 # metagenome_assemble.smk config -- SPAdes groups only, no effect on MEGAHIT
 keep_plasmaag_files: true
 ```
-```yaml
-# metagenome_binning.smk config
-run_plasmaag: true
-```
-
-`keep_plasmaag_files` retains SPAdes' own `contigs.fasta` (pre-scaffolding —
-**not** the same file as this pipeline's renamed `final.contigs.fa`),
-`assembly_graph_after_simplification.gfa`, and `contigs.paths` — all three
-mutually consistent, all three normally deleted with the rest of the SPAdes
-tmpdir. Default off (same "don't keep what's not needed" policy as
+retains SPAdes' own `contigs.fasta` (pre-scaffolding — **not** the same file
+as this pipeline's renamed `final.contigs.fa`), `assembly_graph_after_simplification.gfa`,
+and `contigs.paths` under `assembly/spades/{group}/plasmaag_input/` — all
+three mutually consistent, all three normally deleted with the rest of the
+SPAdes tmpdir. Default off (same "don't keep what's not needed" policy as
 everywhere else — this is real extra disk per group). MEGAHIT groups need no
 extra retention; PlasMAAG's `--reads_and_contigs` mode works from
 `final.contigs.fa` directly.
@@ -929,22 +931,30 @@ extra retention; PlasMAAG's `--reads_and_contigs` mode works from
    (`spades_assemble` scheduled to rerun for a group whose `final.contigs.fa`
    already existed, solely because `plasmaag_input` didn't).
 
-**Mapping strategy**: PlasMAAG's samplesheet takes one row per sample that
-contributed reads to an assembly group (`ASM_READS_R1`/`ASM_READS_R2`), each
-pointing at that group's shared assembly. Multiple rows — a co-assembly
-group with several contributing samples — is how PlasMAAG gets its main
-cross-sample alignment-graph advantage; a single-assembly group typically
-has just one row, which still runs correctly but forgoes that advantage
-(the same single- vs. multi-sample tradeoff VAMB itself has always had).
-
-Install PlasMAAG once, separately (`git clone` + its own `conda env create`,
-see its README — not installable from a plain conda dependency list, so
-`envs/plasmaag.yaml` here is a placeholder/pointer, not a real spec), then
-point this pipeline at it:
-```yaml
-conda_dirs:
-  plasmaag: /path/to/conda/envs/plasmaag
+**Running PlasMAAG itself**, once `keep_plasmaag_files` has produced real
+input (or against MEGAHIT's `final.contigs.fa` directly): install it
+separately (`git clone` + its own `conda env create`, not installable from a
+plain conda dependency list — see its README), then build its samplesheet
+with `scripts/write_plasmaag_samplesheet.py` and invoke it directly:
+```bash
+conda activate plasmaag
+python3 scripts/write_plasmaag_samplesheet.py \
+    --r1 <sample1_R1> [<sample2_R1> ...] --r2 <sample1_R2> [<sample2_R2> ...] \
+    --assembly-path results/assembly/spades/{group}/plasmaag_input \
+    --third-column assembly_dir --out samplesheet.tsv
+PlasMAAG --reads_and_assembly_dir samplesheet.tsv --output plasmaag_out/{group} --threads 16
 ```
+(`--third-column contigs` + point `--assembly-path` at `final.contigs.fa` for
+MEGAHIT groups, per PlasMAAG's own two input modes.) For real cluster runs,
+PlasMAAG's own README documents submitting via its Snakemake directly with
+`--executor cluster-generic` instead of the CLI wrapper.
+
+**Mapping strategy / one samplesheet row per sample**: multiple rows (a
+co-assembly group with several contributing samples, from `ASM_READS_R1`/
+`ASM_READS_R2` in `assemblies_tsv`) is how PlasMAAG gets its main
+cross-sample alignment-graph advantage; a single-assembly group typically has
+just one row, which still runs correctly but forgoes that advantage (the
+same single- vs. multi-sample tradeoff VAMB itself has always had).
 
 ---
 
