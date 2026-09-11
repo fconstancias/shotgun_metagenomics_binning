@@ -910,6 +910,17 @@ everywhere else — this is real extra disk per group). MEGAHIT groups need no
 extra retention; PlasMAAG's `--reads_and_contigs` mode works from
 `final.contigs.fa` directly.
 
+**Fully independent of `anvi_reformat`** — `keep_plasmaag_files` copies
+straight out of `rule spades_assemble`'s own SPAdes tmpdir, before
+`reformat_contigs` (a separate, downstream rule operating on the different
+file `final.contigs.fa` → `final.contigs.reformatted.fa`) ever runs.
+`anvi_reformat: true` is this pipeline's normal default for real runs (see
+Scenario B above) and works alongside `keep_plasmaag_files: true` with no
+interaction at all — don't disable it for PlasMAAG's sake. (The validation
+run this feature was proven against happened to use `anvi_reformat: false`
+purely to keep that particular test minimal, not because it's required —
+confirmed directly by tracing the rule dependency graph, not just assumed.)
+
 **Two sharp edges, both confirmed the hard way against real `spa_single_all` data:**
 
 1. **Cannot retroactively recover files for already-built assemblies.**
